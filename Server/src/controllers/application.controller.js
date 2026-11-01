@@ -66,8 +66,8 @@ export const fetchApplications = async (req, res) => {
     if (company) {
 
       const companyResult = await pool.query(
-       'SELECT id FROM companies WHERE name = $1',
-       [company]
+       'SELECT id FROM companies WHERE name = $1 AND userid = $2',
+       [company, userId]
       );
 
       if (companyResult.rows.length === 0) {
@@ -111,13 +111,26 @@ export const createApplication = async (req, res) => {
     });
   }
   try {
+    const company = await pool.query(
+      'SELECT id FROM companies WHERE id = $1 AND userid = $2',
+      [result.data.companyid, userId]
+    );
+
+    if (company.rows.length === 0) {
+      return res.status(404).json({
+        message: 'Company not found'
+      });
+    }
+
+
     const application = await pool.query(
       `INSERT INTO applications 
       (dateapplied, userid, companyid, position, location, status) 
       VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING *`,
-      [result.data.date_applied, userId, result.data.companyid, result.data.position, result.data.location, result.data.status]
+      [result.data.dateapplied, userId, result.data.companyid, result.data.position, result.data.location, result.data.status]
     );
+
     res.status(201).json(application.rows[0]);
   } catch (error) {
     console.error('Error creating application:', error);
@@ -150,6 +163,19 @@ export const updateApplication = async (req, res) => {
     if (fields.length === 0) {
      return res.status(400).json({ message: 'No fields to update' });
     } 
+
+    if (result.data.companyid) {
+      const company = await pool.query(
+        'SELECT id FROM companies WHERE id = $1 AND userid = $2',
+        [result.data.companyid, userId]
+      );
+
+      if (company.rows.length === 0) {
+        return res.status(404).json({
+          message: 'Company not found'
+        });
+      }
+    }
 
     const application = await pool.query(
       `UPDATE applications SET ${fields.join(', ')} 

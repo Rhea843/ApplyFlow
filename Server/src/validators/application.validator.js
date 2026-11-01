@@ -8,7 +8,7 @@ export const applicationStatusSchema = z.enum([
 ]);
 
 export const applicationValidator = z.object({
-  date_applied: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  dateapplied: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   companyid: z.uuid(),
   position: z.string().trim().min(1),
   location: z.string().trim().min(1),
@@ -16,7 +16,8 @@ export const applicationValidator = z.object({
 });
 
 export const applicationUpdateValidator = z.object({
-  date_applied: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  dateapplied: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  companyid: z.uuid().optional(),
   position: z.string().trim().min(1).optional(),
   location: z.string().trim().min(1).optional(),
   status: applicationStatusSchema.optional()
