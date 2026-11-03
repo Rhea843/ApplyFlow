@@ -18,6 +18,14 @@ export const createCompany = async (req, res) => {
     res.status(201).json({ message: 'Company created successfully', data: result.rows[0] });
   } catch (error) {
     console.error('Error creating company:', error);
+    
+    if (error.code === '23505') { // Unique violation error code
+      return res.status(409).json({
+      message: 'You already have a company with this name'
+      });
+    }
+
+    
     return res.status(500).json({
      message: 'Error creating company'
    });
@@ -109,7 +117,7 @@ export const deleteCompany = async (req, res) => {
   } catch (error) {
     console.error('Error deleting company:', error);
 
-    if (error.code === '23503') {
+    if (error.code === '23503') { // Foreign key violation error code
       return res.status(409).json({
       message: 'Cannot delete company because it has existing applications'
       });
