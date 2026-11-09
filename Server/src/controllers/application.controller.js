@@ -1,4 +1,4 @@
-import  pool  from '../config/db.js';
+import  { pool }  from '../config/db.js';
 import { applicationValidator, applicationUpdateValidator } from '../validators/application.validator.js';
 import { applicationStatusSchema } from '../validators/application.validator.js';
 

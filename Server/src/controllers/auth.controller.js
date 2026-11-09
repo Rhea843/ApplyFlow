@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import  pool  from '../config/db.js';
+import  { pool }  from '../config/db.js';
 import bcrypt from 'bcrypt';
 import { registerValidator, loginValidator } from '../validators/auth.validator.js';
 

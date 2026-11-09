@@ -1,4 +1,4 @@
-import pool from '../config/db.js';
+import { pool } from '../config/db.js';
 import { createCompanyValidator, updateCompanyValidator } from '../validators/company.validator.js';
 
 export const createCompany = async (req, res) => {
