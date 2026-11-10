@@ -93,6 +93,13 @@ export const updateCompany = async (req, res) => {
     res.status(200).json({ message: 'Company updated successfully', data: result.rows[0] });
   } catch (error) {
     console.error('Error updating company:', error);
+
+    if (error.code === '23505') {
+      return res.status(409).json({
+        message: 'You already have a company with this name'
+      });
+    }
+
     return res.status(500).json({
       message: 'Error updating company'
     });
