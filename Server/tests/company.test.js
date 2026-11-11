@@ -5,6 +5,7 @@ import { pool } from '../src/config/db.js';
 import { afterAll } from '@jest/globals';
 
 const createdCompanyIds = [];
+const createdApplicationIds = [];
 const userId = '91e19194-0431-4a43-ba1a-7e499ee80c33';
 const anotherUserId = '449bf7f3-1a84-4d49-a17f-671652a2df45';
 const token = jwt.sign({ userId }, process.env.JWT_SECRET, {
@@ -385,7 +386,147 @@ describe('PATCH /api/companies/:id', () => {
   });
 });
 
+describe('DELETE /api/companies/:id', () => {
+  test('should delete a company successfully', async () => {
+    const createResponse = await request(app)
+      .post('/api/companies')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: `Delete Company ${Date.now()}`,
+        website: 'https://deletecompany.com',
+        location: 'Lagos'
+      });
+
+    expect(createResponse.status).toBe(201);
+    const companyId = createResponse.body.data.id;
+    createdCompanyIds.push(companyId);
+
+    const response = await request(app)
+      .delete(`/api/companies/${companyId}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.message).toBe('Company deleted successfully');
+
+    const verifyResponse = await request(app)
+      .get(`/api/companies/${companyId}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(verifyResponse.status).toBe(404);
+    expect(response.body.data.id).toBe(companyId);
+  });
+
+  test('should reject unauthenticated deletion requests', async () => {
+    const createResponse = await request(app)
+      .post('/api/companies')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: `Delete Company ${Date.now()}`,
+        website: 'https://deletecompany.com',
+        location: 'Lagos'
+      });
+
+    expect(createResponse.status).toBe(201);
+    const companyId = createResponse.body.data.id;
+    createdCompanyIds.push(companyId);
+
+    const response = await request(app)
+      .delete(`/api/companies/${companyId}`);
+
+    expect(response.status).toBe(401);
+  });
+
+  test('should prevent users from deleting another user\'s company', async () => {
+    const anotherUserToken = jwt.sign(
+      { userId: anotherUserId },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+
+    const createResponse = await request(app)
+      .post('/api/companies')
+      .set('Authorization', `Bearer ${anotherUserToken}`)
+      .send({
+        name: `Private Company ${Date.now()}`,
+        website: 'https://privatecompany.com',
+        location: 'Lagos'
+      });
+
+    expect(createResponse.status).toBe(201);
+    const companyId = createResponse.body.data.id;
+    createdCompanyIds.push(companyId);
+
+    const response = await request(app)
+      .delete(`/api/companies/${companyId}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(404);
+    expect(response.body.message).toBe('Company not found');
+
+    const verifyResponse = await request(app)
+    .get(`/api/companies/${companyId}`)
+    .set('Authorization', `Bearer ${anotherUserToken}`);
+
+    expect(verifyResponse.status).toBe(200);
+    expect(verifyResponse.body.data.id).toBe(companyId);
+  });
+
+
+  test('should prevent deleting a company that has an existing application', async () => {
+    const createCompanyResponse = await request(app)
+      .post('/api/companies')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: `Company With Application ${Date.now()}`,
+        website: 'https://companywithapplication.com',
+        location: 'Lagos'
+      });
+
+    expect(createCompanyResponse.status).toBe(201);
+    const companyId = createCompanyResponse.body.data.id;
+    createdCompanyIds.push(companyId);
+
+    const createApplicationResponse = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-11',
+        companyid: companyId,
+        position: 'Software Engineer',
+        location: 'Lagos',
+        status: 'Applied'
+      });
+
+    expect(createApplicationResponse.status).toBe(201);
+    const applicationId = createApplicationResponse.body.id;
+    createdApplicationIds.push(applicationId);   
+
+    const deleteResponse = await request(app)
+      .delete(`/api/companies/${companyId}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(deleteResponse.status).toBe(409);
+    expect(deleteResponse.body.message).toBe(
+      'Cannot delete company because it has existing applications'
+    );
+
+    const verifyDeleteResponse = await request(app)
+      .get(`/api/companies/${companyId}`)
+      .set('Authorization', `Bearer ${token}`);
+
+      expect(verifyDeleteResponse.status).toBe(200);
+      expect(verifyDeleteResponse.body.data.id).toBe(companyId); 
+  }); 
+});
+
 afterAll(async () => {
+  if (createdApplicationIds.length > 0) {
+    await pool.query(
+      'DELETE FROM applications WHERE id = ANY($1::uuid[])',
+      [createdApplicationIds]
+    );
+  }
+
   if (createdCompanyIds.length > 0) {
     await pool.query(
       'DELETE FROM companies WHERE id = ANY($1::uuid[])',
