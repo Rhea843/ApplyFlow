@@ -16,16 +16,16 @@ export const fetchApplications = async (req, res) => {
   const userId = req.user.userId;
   const page = Number(req.query.page  ?? 1);
   const limit = Number(req.query.limit ?? 10);
-  const offset = (page - 1) * limit;
+  
 
   if (
     page < 1 || 
     limit < 1 ||
     !Number.isInteger(page) ||
-    !Number.isInteger(limit)
+    !Number.isInteger(limit) || limit > 100
   ){
     return res.status(400).json({
-      message: 'Page and limit must be positive integers'
+      message: 'Page must be a positive integer and limit must be between 1 and 100'
     });
   }
 
@@ -43,7 +43,6 @@ export const fetchApplications = async (req, res) => {
   WHERE applications.userid = $1`
 
   const values = [userId];
-  let hasWhere = true;
 
   try {
       
@@ -60,7 +59,6 @@ export const fetchApplications = async (req, res) => {
       values.push(status);
       query += ` AND applications.status = $${values.length}`;
       
-      hasWhere = true;
     } 
 
     if (company) {
@@ -78,13 +76,11 @@ export const fetchApplications = async (req, res) => {
 
       values.push(company);
 
-      if (hasWhere) {
-        query += ` AND companies.name = $${values.length}`;
-      } else {
-        query += ` AND companies.name = $${values.length}`;
-      }
+      query += ` AND companies.name = $${values.length}`;
       
     }
+
+    const offset = (page - 1) * limit;
 
     values.push(limit);
     values.push(offset);
