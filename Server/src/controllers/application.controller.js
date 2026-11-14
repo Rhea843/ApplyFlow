@@ -88,7 +88,8 @@ export const fetchApplications = async (req, res) => {
 
     values.push(limit);
     values.push(offset);
-    query += ` LIMIT $${values.length - 1} OFFSET $${values.length}`;
+    query += ` ORDER BY applications.dateapplied DESC, applications.id ASC
+     LIMIT $${values.length - 1} OFFSET $${values.length} `;
 
     const result = await pool.query(query,values);
     res.status(200).json(result.rows);
