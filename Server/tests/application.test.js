@@ -178,9 +178,9 @@ describe('GET /api/applications', () => {
       .set('Authorization', `Bearer ${token}`); 
 
     expect(applicationResponse.status).toBe(201);
-    expect(Array.isArray(response.body)).toBe(true); 
+    expect(Array.isArray(response.body.data)).toBe(true); 
 
-    const foundApplication = response.body.find(
+    const foundApplication = response.body.data.find(
       application => application.id === applicationId
     );
 
@@ -223,7 +223,7 @@ describe('GET /api/applications', () => {
       .set('Authorization', `Bearer ${anotherUserToken}`);
     
     expect(response.status).toBe(200);
-    expect(response.body).toEqual([]);
+    expect(response.body.data).toEqual([]);
   });
 
   test('should filter applications by status', async () => {
@@ -278,18 +278,18 @@ describe('GET /api/applications', () => {
       .set('Authorization', `Bearer ${token}`);
 
     expect(response.status).toBe(200);
-    expect(Array.isArray(response.body)).toBe(true);
+    expect(Array.isArray(response.body.data)).toBe(true);
 
     
     expect(
-      response.body.every(application => application.status === 'Applied')
+      response.body.data.every(application => application.status === 'Applied')
     ).toBe(true);
 
-    const foundApplied = response.body.find(
+    const foundApplied = response.body.data.find(
       application => application.id === applicationId
     );
 
-    const foundInterview = response.body.find(
+    const foundInterview = response.body.data.find(
       application => application.id === anotherApplicationId
     );
 
@@ -373,16 +373,16 @@ describe('GET /api/applications', () => {
       .set('Authorization', `Bearer ${token}`);
 
     expect(response.status).toBe(200);
-    expect(Array.isArray(response.body)).toBe(true);
+    expect(Array.isArray(response.body.data)).toBe(true);
     expect(
-      response.body.every(application => application.company_name === companyName1)
+      response.body.data.every(application => application.company_name === companyName1)
     ).toBe(true);
 
-    const foundApplication1 = response.body.find(
+    const foundApplication1 = response.body.data.find(
       application => application.id === applicationId1
     );
 
-    const foundApplication2 = response.body.find(
+    const foundApplication2 = response.body.data.find(
       application => application.id === applicationId2
     );
 
@@ -474,11 +474,11 @@ describe('GET /api/applications', () => {
       .set('Authorization', `Bearer ${token}`);
 
     expect(response1.status).toBe(200);
-    expect(Array.isArray(response1.body)).toBe(true);
-    expect(response1.body).toHaveLength(2);
+    expect(Array.isArray(response1.body.data)).toBe(true);
+    expect(response1.body.data).toHaveLength(2);
 
     // Ensure that the applications returned are the correct ones based on pagination
-    const applicationIds = response1.body.map(app => app.id);
+    const applicationIds = response1.body.data.map(app => app.id);
     expect(applicationIds).toContain(applicationId2);
     expect(applicationIds).toContain(applicationId3);
     expect(applicationIds).not.toContain(applicationId1);
@@ -488,10 +488,10 @@ describe('GET /api/applications', () => {
       .get(`/api/applications?company=${encodeURIComponent(companyName)}&page=2&limit=2`)
       .set('Authorization', `Bearer ${token}`);
 
-    const applicationIdsPage2 = response2.body.map(app => app.id);
+    const applicationIdsPage2 = response2.body.data.map(app => app.id);
 
     expect(response2.status).toBe(200);
-    expect(Array.isArray(response2.body)).toBe(true);
+    expect(Array.isArray(response2.body.data)).toBe(true);
     expect(applicationIdsPage2).toEqual([applicationId1]);
 
   })
@@ -555,9 +555,254 @@ describe('GET /api/applications', () => {
       .set('Authorization', `Bearer ${token}`);
 
     expect(response.status).toBe(200);
-    expect(Array.isArray(response.body)).toBe(true);
+    expect(Array.isArray(response.body.data)).toBe(true);
   }); 
+  
+  test('should return pagination metadata for the first page', async () => {
+    const companyName = `Pagination Company ${Date.now()}`;
 
+    // company
+    const createResponse = await request(app)
+    .post('/api/companies')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      name: companyName,
+    });
+
+    const companyId = createResponse.body.data.id;
+    createdCompanyIds.push(companyId);
+    expect(createResponse.status).toBe(201);
+
+    // calculate the expected total applications and expected pages
+    const initialCount = await pool.query(
+      'SELECT COUNT(*) FROM applications WHERE userid = $1',
+      [userId]
+    );
+
+    const existingApplications = Number(initialCount.rows[0].count);
+
+    const expectedTotalApplications = existingApplications + 150;
+
+    const expectedTotalPages = Math.ceil(expectedTotalApplications / 10);
+
+    // 150 applications from the same company using a loop
+    for (let i = 0; i < 150; i++) {
+      const applicationResponse = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-11',
+        companyid: companyId,
+        position: `Backend Developer ${i + 1}`,
+        location: 'Lagos',
+        status: 'Applied'
+      });
+
+      expect(applicationResponse.status).toBe(201);
+
+      createdApplicationIds.push(applicationResponse.body.id);
+    }
+
+    const response = await request(app)
+    .get('/api/applications?page=1&limit=10')
+    .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(Array.isArray(response.body.data)).toBe(true);
+    expect(response.body.data).toHaveLength(10);
+    expect(response.body.pagination).toEqual(
+      expect.objectContaining({
+        totalApplications: expectedTotalApplications,
+        currentPage: 1,
+        limit: 10,
+        totalPages: expectedTotalPages,
+        hasNextPage: true,
+        hasPreviousPage: false
+      })
+    );
+  });
+
+  test('should return correct pagination metadata when filtering by status', async () => {
+
+    const initialCount = await pool.query(
+      `SELECT COUNT(*)
+      FROM applications
+      WHERE userid = $1 AND status = $2`,
+      [userId, 'Applied']
+    );
+
+    const existingApplied = Number(initialCount.rows[0].count);
+
+    const companyName = `Google Company ${Date.now()}`;
+
+    const createResponse = await request(app)
+      .post('/api/companies')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: companyName,
+     });
+
+     const companyId = createResponse.body.data.id;
+     createdCompanyIds.push(companyId);
+
+     // Create an application with status 'Applied'
+     const applicationResponse = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-11',
+        companyid: companyId,
+        position: 'Backend Developer',
+        location: 'Lagos',
+        status: 'Applied'
+      });
+    const applicationId = applicationResponse.body.id;
+    createdApplicationIds.push(applicationId);
+
+    expect(createResponse.status).toBe(201);
+    expect(applicationResponse.status).toBe(201);
+
+    const anotherApplicationResponse = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-12',
+        companyid: companyId,
+        position: 'Frontend Developer',
+        location: 'Lagos',
+        status: 'Interview'
+      });
+    const anotherApplicationId = anotherApplicationResponse.body.id;
+    createdApplicationIds.push(anotherApplicationId);
+
+    expect(anotherApplicationResponse.status).toBe(201);
+    // Retrieve applications filtered by status 'Applied'
+    const response = await request(app)
+      .get('/api/applications?status=Applied&page=1&limit=10')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(Array.isArray(response.body.data)).toBe(true);
+
+    const expectedTotalApplications = existingApplied + 1;
+    const expectedTotalPages = Math.ceil(expectedTotalApplications / 10);
+    const expectedHasNextPage = expectedTotalPages > 1;
+
+
+    expect(response.body.pagination).toEqual(
+      expect.objectContaining({
+        totalApplications: expectedTotalApplications,
+        currentPage: 1,
+        limit: 10,
+        totalPages: expectedTotalPages,
+        hasNextPage: expectedHasNextPage,
+        hasPreviousPage: false
+      })
+    );
+
+    expect(
+      response.body.data.every(application => application.status === 'Applied')
+    ).toBe(true);
+  });
+
+  test('should return the correct applications on a later page', async () => {
+    const companyName = `Later Page Company ${Date.now()}`;
+
+    const createResponse = await request(app)
+      .post('/api/companies')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: companyName,
+    });
+
+    const companyId = createResponse.body.data.id;
+    createdCompanyIds.push(companyId);
+
+    expect(createResponse.status).toBe(201);
+
+    //create 3 applications for the same company
+
+    const applicationResponse = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-10',
+        companyid: companyId,
+        position: 'Backend Developer',
+        location: 'Lagos',
+        status: 'Applied'
+      });
+    const applicationId = applicationResponse.body.id;
+    createdApplicationIds.push(applicationId);
+
+    expect(applicationResponse.status).toBe(201);
+
+
+    const applicationResponse2 = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-11',
+        companyid: companyId,
+        position: 'Backend Developer',
+        location: 'Lagos',
+        status: 'Interview'
+      });
+    const applicationId2 = applicationResponse2.body.id;
+    createdApplicationIds.push(applicationId2);
+
+    expect(applicationResponse2.status).toBe(201);
+
+
+    const applicationResponse3 = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-13',
+        companyid: companyId,
+        position: 'Backend Developer',
+        location: 'Lagos',
+        status: 'Offer'
+      });
+    const applicationId3 = applicationResponse3.body.id;
+    createdApplicationIds.push(applicationId3);
+
+    expect(applicationResponse3.status).toBe(201);
+
+    const response = await request(app)
+    .get(`/api/applications?company=${encodeURIComponent(companyName)}&page=2&limit=2`)
+    .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(1)
+    expect(response.body.data[0].id).toBe(applicationId);
+
+    expect(
+      response.body.data.every(application => application.status === 'Applied')
+    ).toBe(true);
+
+    const beyondLastPage = await request(app)
+    .get(`/api/applications?company=${encodeURIComponent(companyName)}&page=3&limit=2`)
+    .set('Authorization', `Bearer ${token}`);
+
+    expect(beyondLastPage.status).toBe(200);
+    expect(beyondLastPage.body.data).toEqual([]);
+
+    expect(beyondLastPage.body.pagination).toEqual(
+      expect.objectContaining({
+        totalApplications: 3,
+        currentPage: 3,
+        limit: 2,
+        totalPages: 2,
+        hasNextPage: false,
+        hasPreviousPage: true
+      })
+    );
+  });
+
+
+  
+  
 });
 
 afterAll(async () => {

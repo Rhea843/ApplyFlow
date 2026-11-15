@@ -17,6 +17,8 @@ export const fetchApplications = async (req, res) => {
   const page = Number(req.query.page  ?? 1);
   const limit = Number(req.query.limit ?? 10);
   
+  
+  
 
   if (
     page < 1 || 
@@ -29,18 +31,12 @@ export const fetchApplications = async (req, res) => {
     });
   }
 
-  let query = `SELECT 
-  applications.id, 
-  applications.position, 
-  applications.status, 
-  companies.name AS company_name,  
-  companies.location AS company_location,
-  applications.location AS application_location,
-  TO_CHAR(applications.dateapplied, 'YYYY-MM-DD') AS date_applied
-  FROM applications
-  JOIN companies
-  ON applications.companyid = companies.id
-  WHERE applications.userid = $1`
+  let filterQuery = `
+    applications
+    JOIN companies
+    ON applications.companyid = companies.id
+    WHERE applications.userid = $1
+ `;
 
   const values = [userId];
 
@@ -57,7 +53,7 @@ export const fetchApplications = async (req, res) => {
       }
 
       values.push(status);
-      query += ` AND applications.status = $${values.length}`;
+      filterQuery += ` AND applications.status = $${values.length}`;
       
     } 
 
@@ -76,19 +72,52 @@ export const fetchApplications = async (req, res) => {
 
       values.push(company);
 
-      query += ` AND companies.name = $${values.length}`;
+      filterQuery += ` AND companies.name = $${values.length}`;
       
     }
 
+    const countQuery = `SELECT COUNT(*) FROM ${filterQuery}`;
+
+    const countResult = await pool.query(countQuery, values);
+
+    const totalApplications = Number(countResult.rows[0].count);
+    const totalPages = Math.ceil(totalApplications / limit);
+    const hasNextPage = page < totalPages;
+    const hasPreviousPage = page > 1;
+
     const offset = (page - 1) * limit;
 
-    values.push(limit);
-    values.push(offset);
-    query += ` ORDER BY applications.dateapplied DESC, applications.id ASC
-     LIMIT $${values.length - 1} OFFSET $${values.length} `;
+    // Keep filter values separate from pagination values
+    const queryValues = [...values, limit, offset];
 
-    const result = await pool.query(query,values);
-    res.status(200).json(result.rows);
+    const query = `
+      SELECT
+        applications.id,
+        applications.position,
+        applications.status,
+        companies.name AS company_name,
+        companies.location AS company_location,
+        applications.location AS application_location,
+        TO_CHAR(applications.dateapplied, 'YYYY-MM-DD') AS date_applied
+      FROM ${filterQuery}
+       ORDER BY applications.dateapplied DESC, applications.id ASC
+      LIMIT $${queryValues.length - 1}
+      OFFSET $${queryValues.length}
+    `;
+
+    const result = await pool.query(query, queryValues);
+
+    res.status(200).json({
+      data: result.rows,
+      pagination: {
+        totalApplications,
+        currentPage: page,
+        limit,
+        totalPages,
+        hasNextPage,
+        hasPreviousPage
+      }
+    });
 
   } catch (error) {
     console.error('Error fetching applications:', error);
