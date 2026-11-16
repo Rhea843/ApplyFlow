@@ -800,7 +800,106 @@ describe('GET /api/applications', () => {
     );
   });
 
+ test('should filter applications by date range', async () => {
 
+  const companyName = `Spotify ${Date.now()}`;
+
+    const createResponse = await request(app)
+      .post('/api/companies')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: companyName,
+     });
+
+     const companyId = createResponse.body.data.id;
+     createdCompanyIds.push(companyId);
+
+     // Create an application with status 'Applied'
+     const applicationResponse = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-05',
+        companyid: companyId,
+        position: 'Backend Developer',
+        location: 'Lagos',
+        status: 'Applied'
+      });
+    const applicationId = applicationResponse.body.id;
+    createdApplicationIds.push(applicationId);
+
+    expect(createResponse.status).toBe(201);
+    expect(applicationResponse.status).toBe(201);
+
+    const applicationResponse2 = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-10',
+        companyid: companyId,
+        position: 'Frontend Developer',
+        location: 'Lagos',
+        status: 'Interview'
+      });
+    const applicationId2 = applicationResponse2.body.id;
+    createdApplicationIds.push(applicationId2);
+
+    expect(applicationResponse2.status).toBe(201);
+
+    const applicationResponse3 = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-20',
+        companyid: companyId,
+        position: 'Software Engineer',
+        location: 'Lagos',
+        status: 'Offer'
+      });
+    const applicationId3 = applicationResponse3.body.id;
+    createdApplicationIds.push(applicationId3);
+
+    expect(applicationResponse3.status).toBe(201);
+
+    const response = await request(app)
+    .get(`/api/applications?company=${encodeURIComponent(companyName)}&startDate=2026-11-06&endDate=2026-11-15`)
+    .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0].id).toBe(applicationId2);
+ })
+
+ test('should return 400 for invalid start date', async () => {
+    const response = await request(app)
+      .get('/api/applications?startDate=2026-02-30')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe('Invalid start date');
+  });
+
+  test('should return 400 for an invalid end date', async () => {
+    const response = await request(app)
+      .get('/api/applications?endDate=2026-02-30')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe('Invalid end date');
+ });
+
+ test('should return 400 when start date is later than end date', async () => {
+    const response = await request(app)
+      .get('/api/applications?startDate=2026-11-20&endDate=2026-11-10')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe(
+      'Start date cannot be later than end date'
+    );
+ });
+
+  
   
   
 });

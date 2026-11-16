@@ -1,6 +1,6 @@
 import  { pool }  from '../config/db.js';
 import { applicationValidator, applicationUpdateValidator } from '../validators/application.validator.js';
-import { applicationStatusSchema } from '../validators/application.validator.js';
+import { applicationStatusSchema, dateSchema } from '../validators/application.validator.js';
 
 export const healthCheck = (req, res) => {
   res.status(200).json({
@@ -13,11 +13,42 @@ export const fetchApplications = async (req, res) => {
 
   const status = req.query.status;
   const company = req.query.company;
+  const startDate = req.query.startDate;
+  const endDate = req.query.endDate;
+
   const userId = req.user.userId;
   const page = Number(req.query.page  ?? 1);
   const limit = Number(req.query.limit ?? 10);
-  
-  
+
+ //start date and end date validation
+  if (startDate) {
+    const validation = dateSchema.safeParse(startDate);
+
+    if (!validation.success) {
+      return res.status(400).json({
+        message: 'Invalid start date',
+        errors: validation.error.issues
+      });
+    }
+  }
+
+  if (endDate) {
+    const validation = dateSchema.safeParse(endDate);
+
+    if (!validation.success) {
+      return res.status(400).json({
+        message: 'Invalid end date',
+        errors: validation.error.issues
+      });
+    }
+  }
+ 
+  if (startDate && endDate && startDate > endDate) {
+    return res.status(400).json({
+      message: 'Start date cannot be later than end date'
+    });
+  }
+    
   
 
   if (
@@ -40,6 +71,7 @@ export const fetchApplications = async (req, res) => {
 
   const values = [userId];
 
+  //status filter
   try {
       
     if (status) {
@@ -57,6 +89,7 @@ export const fetchApplications = async (req, res) => {
       
     } 
 
+    //company filter
     if (company) {
 
       const companyResult = await pool.query(
@@ -74,6 +107,18 @@ export const fetchApplications = async (req, res) => {
 
       filterQuery += ` AND companies.name = $${values.length}`;
       
+    }
+
+    //start date filter
+    if (startDate) {
+      values.push(startDate)
+      filterQuery += ` AND applications.dateapplied >= $${values.length}`;
+    }
+    
+    //end date filter
+    if (endDate) {
+      values.push(endDate);
+      filterQuery += ` AND applications.dateapplied <= $${values.length}`;
     }
 
     const countQuery = `SELECT COUNT(*) FROM ${filterQuery}`;
