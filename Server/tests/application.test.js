@@ -949,8 +949,6 @@ describe('GET /api/applications', () => {
     expect(createResponse.status).toBe(201);
     expect(anotherApplicationResponse.status).toBe(201);
 
-    
-
     const response = await request(app)
     .get(`/api/applications?company=${encodeURIComponent(companyName)}&position=backend`)
     .set('Authorization', `Bearer ${token}`);
@@ -965,6 +963,136 @@ describe('GET /api/applications', () => {
         application.position.toLowerCase().includes('backend')
       )
     ).toBe(true);
+  });
+
+  test('should search applications by position, company name, and application location', async () => {
+    const uniqueId = Date.now();
+    
+    const companyName1 = `Tech Company ${Date.now()}`;
+    const companyName2 = `Paystack${uniqueId} Company`;
+    const companyName3 = `Shell Company ${Date.now()}`;
+
+    const expectSearchResult = async (term, expectedId) => {
+      const response = await request(app)
+        .get(`/api/applications?search=${term}`)
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toHaveLength(1);
+      expect(response.body.data[0].id).toBe(expectedId);
+
+      return response.body.data[0];
+    };
+
+    //first company
+    const createResponse = await request(app)
+    .post('/api/companies')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      name: companyName1,
+    });
+
+    const companyId = createResponse.body.data.id;
+    createdCompanyIds.push(companyId);
+
+    //second company
+    const createResponse2 = await request(app)
+    .post('/api/companies')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      name: companyName2,
+    });
+
+    const companyId2 = createResponse2.body.data.id;
+    createdCompanyIds.push(companyId2);
+
+    //third company
+    const createResponse3 = await request(app)
+    .post('/api/companies')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      name: companyName3,
+    });
+
+    const companyId3 = createResponse3.body.data.id;
+    createdCompanyIds.push(companyId3);
+    
+
+    // Create an application with position 'Backend'
+    const applicationResponse = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-11',
+        companyid: companyId,
+        position: `Backend${uniqueId} Developer`,
+        location: 'Enugu',
+        status: 'Applied'
+      });
+
+    const applicationId = applicationResponse.body.id;
+    createdApplicationIds.push(applicationId);
+
+    expect(createResponse.status).toBe(201);
+    expect(applicationResponse.status).toBe(201);
+    
+    //second application with company name Paystack
+    const anotherApplicationResponse = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-11',
+        companyid: companyId2,
+        position: 'Frontend Developer',
+        location: 'Abuja',
+        status: 'Applied'
+      });
+    const anotherApplicationId = anotherApplicationResponse.body.id;
+    createdApplicationIds.push(anotherApplicationId);
+
+    expect(createResponse2.status).toBe(201);
+    expect(anotherApplicationResponse.status).toBe(201);
+
+    //third application with company locaton lagos
+    const thirdApplicationResponse = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-11',
+        companyid: companyId3,
+        position: 'Software Engineer',
+        location: `Lagos${uniqueId}`,
+        status: 'Applied'
+      });
+    const thirdApplicationId = thirdApplicationResponse.body.id;
+    createdApplicationIds.push(thirdApplicationId);
+
+    expect(createResponse3.status).toBe(201);
+    expect(thirdApplicationResponse.status).toBe(201);
+
+    //backend search response
+    const backendResult = await expectSearchResult(
+     `BACKEND${uniqueId}`,
+      applicationId
+    ); 
+
+    //Paystack search response
+    const paystackResult = await expectSearchResult(
+      `PAYSTACK${uniqueId}`,
+      anotherApplicationId
+    );
+
+    //Lagos search response
+    const locationResult = await expectSearchResult(
+      `LAGOS${uniqueId}`,
+      thirdApplicationId
+    );
+
+    expect(backendResult.position.toLowerCase()).toContain(`backend${uniqueId}`.toLowerCase());
+
+    expect(paystackResult.company_name.toLowerCase()).toContain(`paystack${uniqueId}`.toLowerCase());
+
+    expect(locationResult.application_location.toLowerCase()).toContain(`lagos${uniqueId}`.toLowerCase());
   });
   
   

@@ -16,6 +16,7 @@ export const fetchApplications = async (req, res) => {
   const startDate = req.query.startDate;
   const endDate = req.query.endDate;
   const position = req.query.position;
+  const search = req.query.search
 
   const userId = req.user.userId;
   const page = Number(req.query.page  ?? 1);
@@ -126,6 +127,18 @@ export const fetchApplications = async (req, res) => {
     if (endDate) {
       values.push(endDate);
       filterQuery += ` AND applications.dateapplied <= $${values.length}`;
+    }
+
+    //general search
+    if (search) {
+      values.push(`%${search}%`);
+      const searchPlaceholder = `$${values.length}`;
+
+      filterQuery += ` AND (
+        applications.position ILIKE ${searchPlaceholder}
+        OR companies.name ILIKE ${searchPlaceholder}
+        OR applications.location ILIKE ${searchPlaceholder}
+      )`;
     }
 
     const countQuery = `SELECT COUNT(*) FROM ${filterQuery}`;
