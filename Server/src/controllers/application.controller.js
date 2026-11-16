@@ -15,6 +15,7 @@ export const fetchApplications = async (req, res) => {
   const company = req.query.company;
   const startDate = req.query.startDate;
   const endDate = req.query.endDate;
+  const position = req.query.position;
 
   const userId = req.user.userId;
   const page = Number(req.query.page  ?? 1);
@@ -109,12 +110,18 @@ export const fetchApplications = async (req, res) => {
       
     }
 
+    //position filter
+    if (position) {
+      values.push(`%${position}%`);
+      filterQuery += ` AND applications.position ILIKE $${values.length}`;
+    }
+
     //start date filter
     if (startDate) {
       values.push(startDate)
       filterQuery += ` AND applications.dateapplied >= $${values.length}`;
     }
-    
+
     //end date filter
     if (endDate) {
       values.push(endDate);

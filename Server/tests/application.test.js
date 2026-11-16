@@ -899,7 +899,73 @@ describe('GET /api/applications', () => {
     );
  });
 
-  
+  test('should filter applications by position using partial, case-insensitive matching', async () => {
+    
+    const companyName = `Test Company ${Date.now()}`;
+
+    const createResponse = await request(app)
+    .post('/api/companies')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      name: companyName,
+    });
+
+    const companyId = createResponse.body.data.id;
+    createdCompanyIds.push(companyId);
+
+    // Create an application with status 'Applied'
+    const applicationResponse = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-11',
+        companyid: companyId,
+        position: 'Backend Developer',
+        location: 'Lagos',
+        status: 'Applied'
+      });
+
+    const applicationId = applicationResponse.body.id;
+    createdApplicationIds.push(applicationId);
+
+    expect(createResponse.status).toBe(201);
+    expect(applicationResponse.status).toBe(201);
+    
+    //second application
+    
+    const anotherApplicationResponse = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-11',
+        companyid: companyId,
+        position: 'Frontend Developer',
+        location: 'Lagos',
+        status: 'Applied'
+      });
+    const anotherApplicationId = anotherApplicationResponse.body.id;
+    createdApplicationIds.push(anotherApplicationId);
+
+    expect(createResponse.status).toBe(201);
+    expect(anotherApplicationResponse.status).toBe(201);
+
+    
+
+    const response = await request(app)
+    .get(`/api/applications?company=${encodeURIComponent(companyName)}&position=backend`)
+    .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.length).toBeGreaterThan(0);
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0].id).toBe(applicationId);
+
+    expect(
+      response.body.data.every((application) =>
+        application.position.toLowerCase().includes('backend')
+      )
+    ).toBe(true);
+  });
   
   
 });
