@@ -388,7 +388,7 @@ describe('GET /api/applications', () => {
 
     expect(foundApplication1).toBeDefined();
     expect(foundApplication2).toBeUndefined();  
-  })
+  });
 
   test('should reject invalid company filter', async () => {
 
@@ -494,7 +494,7 @@ describe('GET /api/applications', () => {
     expect(Array.isArray(response2.body.data)).toBe(true);
     expect(applicationIdsPage2).toEqual([applicationId1]);
 
-  })
+  });
 
   test('should reject zero as page or limit', async () => {
       
@@ -868,7 +868,7 @@ describe('GET /api/applications', () => {
     expect(response.status).toBe(200);
     expect(response.body.data).toHaveLength(1);
     expect(response.body.data[0].id).toBe(applicationId2);
- })
+ });
 
  test('should return 400 for invalid start date', async () => {
     const response = await request(app)
@@ -1095,7 +1095,810 @@ describe('GET /api/applications', () => {
     expect(locationResult.application_location.toLowerCase()).toContain(`lagos${uniqueId}`.toLowerCase());
   });
   
+  test('should sort applications by position in asc order', async () => {
+    const companyName = `Tech Company ${Date.now()}`;
+
+    //company creation
+    const createResponse = await request(app)
+    .post('/api/companies')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      name: companyName,
+    });
+
+    const companyId = createResponse.body.data.id;
+    createdCompanyIds.push(companyId);
+
+    expect(createResponse.status).toBe(201);
+
+    //first application
+    const applicationResponse = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-13',
+        companyid: companyId,
+        position: 'Alpha Backend Developer',
+        location: 'Lagos',
+        status: 'Applied'
+      });
+
+    const applicationId = applicationResponse.body.id;
+    createdApplicationIds.push(applicationId);
+
+    expect(applicationResponse.status).toBe(201);
+
+    const applicationResponse2 = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-13',
+        companyid: companyId,
+        position: 'Middle Backend Developer',
+        location: 'Lagos',
+        status: 'Applied'
+      });
+
+    const applicationId2 = applicationResponse2.body.id;
+    createdApplicationIds.push(applicationId2);
+
+    expect(applicationResponse2.status).toBe(201);
+
+    const applicationResponse3 = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-13',
+        companyid: companyId,
+        position: 'Zulu Backend Developer',
+        location: 'Lagos',
+        status: 'Applied'
+      });
+
+    const applicationId3 = applicationResponse3.body.id;
+    createdApplicationIds.push(applicationId3);
+
+    expect(applicationResponse3.status).toBe(201);
+
+    const response = await request(app)
+    .get(`/api/applications?company=${encodeURIComponent(companyName)}&sortBy=position&order=asc`)
+    .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(3);
+    expect(response.body.data.map(app => app.position)).toEqual([
+      'Alpha Backend Developer',
+      'Middle Backend Developer',
+      'Zulu Backend Developer'
+    ]);
+
+  });
+
+  test('should sort applications by position in desc order', async () => {
+    const companyName = `Tech Company ${Date.now()}`;
+
+    //company creation
+    const createResponse = await request(app)
+    .post('/api/companies')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      name: companyName,
+    });
+
+    const companyId = createResponse.body.data.id;
+    createdCompanyIds.push(companyId);
+
+    expect(createResponse.status).toBe(201);
+
+    //first application
+    const applicationResponse = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-13',
+        companyid: companyId,
+        position: 'Alpha Backend Developer',
+        location: 'Lagos',
+        status: 'Applied'
+      });
+
+    const applicationId = applicationResponse.body.id;
+    createdApplicationIds.push(applicationId);
+
+    expect(applicationResponse.status).toBe(201);
+
+    const applicationResponse2 = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-13',
+        companyid: companyId,
+        position: 'Middle Backend Developer',
+        location: 'Lagos',
+        status: 'Applied'
+      });
+
+    const applicationId2 = applicationResponse2.body.id;
+    createdApplicationIds.push(applicationId2);
+
+    expect(applicationResponse2.status).toBe(201);
+
+    const applicationResponse3 = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-13',
+        companyid: companyId,
+        position: 'Zulu Backend Developer',
+        location: 'Lagos',
+        status: 'Applied'
+      });
+
+    const applicationId3 = applicationResponse3.body.id;
+    createdApplicationIds.push(applicationId3);
+
+    expect(applicationResponse3.status).toBe(201);
+
+    const response = await request(app)
+    .get(`/api/applications?company=${encodeURIComponent(companyName)}&sortBy=position&order=desc`)
+    .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(3);
+    expect(response.body.data.map(app => app.position)).toEqual([
+      'Zulu Backend Developer',
+      'Middle Backend Developer',
+      'Alpha Backend Developer'
+    ]);
+
+  });
   
+  test('should sort applications by dateApplied in asc order', async () => {
+    const uniqueId = Date.now();
+
+    const companyName = `Tech${uniqueId} Company`;
+
+    //company creation
+    const createResponse = await request(app)
+    .post('/api/companies')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      name: companyName,
+    });
+
+    const companyId = createResponse.body.data.id;
+    createdCompanyIds.push(companyId);
+
+    expect(createResponse.status).toBe(201);
+
+    //first application
+    const applicationResponse = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-05',
+        companyid: companyId,
+        position: 'Alpha Backend Developer',
+        location: 'Lagos',
+        status: 'Applied'
+      });
+
+    const applicationId = applicationResponse.body.id;
+    createdApplicationIds.push(applicationId);
+
+    expect(applicationResponse.status).toBe(201);
+
+    const applicationResponse2 = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-15',
+        companyid: companyId,
+        position: 'Middle Backend Developer',
+        location: 'Lagos',
+        status: 'Applied'
+      });
+
+    const applicationId2 = applicationResponse2.body.id;
+    createdApplicationIds.push(applicationId2);
+
+    expect(applicationResponse2.status).toBe(201);
+
+    const applicationResponse3 = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-25',
+        companyid: companyId,
+        position: 'Zulu Backend Developer',
+        location: 'Lagos',
+        status: 'Applied'
+      });
+
+    const applicationId3 = applicationResponse3.body.id;
+    createdApplicationIds.push(applicationId3);
+
+    expect(applicationResponse3.status).toBe(201);
+
+    const response = await request(app)
+    .get(`/api/applications?company=${encodeURIComponent(companyName)}&sortBy=dateApplied&order=asc`)
+    .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(3);
+    expect(response.body.data.map(app => app.date_applied)).toEqual([
+      '2026-11-05',
+      '2026-11-15',
+      '2026-11-25'
+    ]);
+
+  });
+
+  test('should sort applications by dateApplied in desc order', async () => {
+    const uniqueId = Date.now();
+
+    const companyName = `Tech${uniqueId} Company`;
+
+    //company creation
+    const createResponse = await request(app)
+    .post('/api/companies')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      name: companyName,
+    });
+
+    const companyId = createResponse.body.data.id;
+    createdCompanyIds.push(companyId);
+
+    expect(createResponse.status).toBe(201);
+
+    //first application
+    const applicationResponse = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-05',
+        companyid: companyId,
+        position: 'Alpha Backend Developer',
+        location: 'Lagos',
+        status: 'Applied'
+      });
+
+    const applicationId = applicationResponse.body.id;
+    createdApplicationIds.push(applicationId);
+
+    expect(applicationResponse.status).toBe(201);
+
+    const applicationResponse2 = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-15',
+        companyid: companyId,
+        position: 'Middle Backend Developer',
+        location: 'Lagos',
+        status: 'Applied'
+      });
+
+    const applicationId2 = applicationResponse2.body.id;
+    createdApplicationIds.push(applicationId2);
+
+    expect(applicationResponse2.status).toBe(201);
+
+    const applicationResponse3 = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-25',
+        companyid: companyId,
+        position: 'Zulu Backend Developer',
+        location: 'Lagos',
+        status: 'Applied'
+      });
+
+    const applicationId3 = applicationResponse3.body.id;
+    createdApplicationIds.push(applicationId3);
+
+    expect(applicationResponse3.status).toBe(201);
+
+    const response = await request(app)
+    .get(`/api/applications?company=${encodeURIComponent(companyName)}&sortBy=dateApplied&order=desc`)
+    .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(3);
+    expect(response.body.data.map(app => app.date_applied)).toEqual([
+      '2026-11-25',
+      '2026-11-15',
+      '2026-11-05'
+    ]);
+
+  });
+
+  test('should sort applications by company name in asc order', async () => {
+    const uniqueId = Date.now();
+
+    const companyName = `Alpha Systems ${uniqueId}`;
+    const companyName2 = `Middle Solutions ${uniqueId}`;
+    const companyName3 = `Zulu Technologies ${uniqueId}`;
+
+    //company1 creation
+    const createResponse = await request(app)
+    .post('/api/companies')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      name: companyName,
+    });
+
+    const companyId = createResponse.body.data.id;
+    createdCompanyIds.push(companyId);
+
+    expect(createResponse.status).toBe(201);
+
+    //company2 creation
+    const createResponse2 = await request(app)
+    .post('/api/companies')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      name: companyName2,
+    });
+
+    const companyId2 = createResponse2.body.data.id;
+    createdCompanyIds.push(companyId2);
+
+    expect(createResponse2.status).toBe(201);
+
+    //company3 creation
+    const createResponse3 = await request(app)
+    .post('/api/companies')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      name: companyName3,
+    });
+
+    const companyId3 = createResponse3.body.data.id;
+    createdCompanyIds.push(companyId3);
+
+    expect(createResponse3.status).toBe(201);
+
+    //first application
+    const applicationResponse = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-05',
+        companyid: companyId,
+        position: 'Alpha Backend Developer',
+        location: 'Lagos',
+        status: 'Applied'
+      });
+
+    const applicationId = applicationResponse.body.id;
+    createdApplicationIds.push(applicationId);
+
+    expect(applicationResponse.status).toBe(201);
+
+    const applicationResponse2 = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-15',
+        companyid: companyId2,
+        position: 'Middle Backend Developer',
+        location: 'Lagos',
+        status: 'Applied'
+      });
+
+    const applicationId2 = applicationResponse2.body.id;
+    createdApplicationIds.push(applicationId2);
+
+    expect(applicationResponse2.status).toBe(201);
+
+    const applicationResponse3 = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-25',
+        companyid: companyId3,
+        position: 'Zulu Backend Developer',
+        location: 'Lagos',
+        status: 'Applied'
+      });
+
+    const applicationId3 = applicationResponse3.body.id;
+    createdApplicationIds.push(applicationId3);
+
+    expect(applicationResponse3.status).toBe(201);
+
+    const response = await request(app)
+    .get(`/api/applications?search=${uniqueId}&sortBy=company&order=asc&limit=100`)
+    .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(3);
+
+    expect(response.body.data.map(app => app.company_name)).toEqual([
+      companyName,
+      companyName2,
+      companyName3
+    ]);
+
+  });
+
+  test('should sort applications by company name in desc order', async () => {
+    const uniqueId = Date.now();
+
+    const companyName = `Alpha Systems ${uniqueId}`;
+    const companyName2 = `Middle Solutions ${uniqueId}`;
+    const companyName3 = `Zulu Technologies ${uniqueId}`;
+
+    //company1 creation
+    const createResponse = await request(app)
+    .post('/api/companies')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      name: companyName,
+    });
+
+    const companyId = createResponse.body.data.id;
+    createdCompanyIds.push(companyId);
+
+    expect(createResponse.status).toBe(201);
+
+    //company2 creation
+    const createResponse2 = await request(app)
+    .post('/api/companies')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      name: companyName2,
+    });
+
+    const companyId2 = createResponse2.body.data.id;
+    createdCompanyIds.push(companyId2);
+
+    expect(createResponse2.status).toBe(201);
+
+    //company3 creation
+    const createResponse3 = await request(app)
+    .post('/api/companies')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      name: companyName3,
+    });
+
+    const companyId3 = createResponse3.body.data.id;
+    createdCompanyIds.push(companyId3);
+
+    expect(createResponse3.status).toBe(201);
+
+    //first application
+    const applicationResponse = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-05',
+        companyid: companyId,
+        position: 'Alpha Backend Developer',
+        location: 'Lagos',
+        status: 'Applied'
+      });
+
+    const applicationId = applicationResponse.body.id;
+    createdApplicationIds.push(applicationId);
+
+    expect(applicationResponse.status).toBe(201);
+
+    const applicationResponse2 = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-15',
+        companyid: companyId2,
+        position: 'Middle Backend Developer',
+        location: 'Lagos',
+        status: 'Applied'
+      });
+
+    const applicationId2 = applicationResponse2.body.id;
+    createdApplicationIds.push(applicationId2);
+
+    expect(applicationResponse2.status).toBe(201);
+
+    const applicationResponse3 = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-25',
+        companyid: companyId3,
+        position: 'Zulu Backend Developer',
+        location: 'Lagos',
+        status: 'Applied'
+      });
+
+    const applicationId3 = applicationResponse3.body.id;
+    createdApplicationIds.push(applicationId3);
+
+    expect(applicationResponse3.status).toBe(201);
+
+    const response = await request(app)
+    .get(`/api/applications?search=${uniqueId}&sortBy=company&order=desc&limit=100`)
+    .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(3);
+
+    expect(response.body.data.map(app => app.company_name)).toEqual([
+      companyName3,
+      companyName2,
+      companyName
+    ]);
+
+  });
+
+  test('should sort applications by status in asc order', async () => {
+    const uniqueId = Date.now();
+
+    const companyName = `Tech Company ${uniqueId}`;
+
+    //company creation
+    const createResponse = await request(app)
+    .post('/api/companies')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      name: companyName,
+    });
+
+    const companyId = createResponse.body.data.id;
+    createdCompanyIds.push(companyId);
+
+    expect(createResponse.status).toBe(201);
+
+    //first application
+    const applicationResponse = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-05',
+        companyid: companyId,
+        position: 'Alpha Backend Developer',
+        location: 'Lagos',
+        status: 'Rejected'
+      });
+
+    const applicationId = applicationResponse.body.id;
+    createdApplicationIds.push(applicationId);
+
+    expect(applicationResponse.status).toBe(201);
+
+    const applicationResponse2 = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-15',
+        companyid: companyId,
+        position: 'Middle Backend Developer',
+        location: 'Lagos',
+        status: 'Applied'
+      });
+
+    const applicationId2 = applicationResponse2.body.id;
+    createdApplicationIds.push(applicationId2);
+
+    expect(applicationResponse2.status).toBe(201);
+
+    const applicationResponse3 = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-25',
+        companyid: companyId,
+        position: 'Zulu Backend Developer',
+        location: 'Lagos',
+        status: 'Interview'
+      });
+
+    const applicationId3 = applicationResponse3.body.id;
+    createdApplicationIds.push(applicationId3);
+
+    expect(applicationResponse3.status).toBe(201);
+
+    const response = await request(app)
+    .get(`/api/applications?search=${uniqueId}&sortBy=status&order=asc`)
+    .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.map(app => app.id)).toHaveLength(3);
+    expect(response.body.data.map(app => app.status)).toEqual([
+      'Applied',
+      'Interview',
+      'Rejected'
+    ]);
+
+  });
+
+  test('should sort applications by status in desc order', async () => {
+    const uniqueId = Date.now();
+
+    const companyName = `Tech Company ${uniqueId}`;
+
+    //company creation
+    const createResponse = await request(app)
+    .post('/api/companies')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      name: companyName,
+    });
+
+    const companyId = createResponse.body.data.id;
+    createdCompanyIds.push(companyId);
+
+    expect(createResponse.status).toBe(201);
+
+    //first application
+    const applicationResponse = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-05',
+        companyid: companyId,
+        position: 'Alpha Backend Developer',
+        location: 'Lagos',
+        status: 'Rejected'
+      });
+
+    const applicationId = applicationResponse.body.id;
+    createdApplicationIds.push(applicationId);
+
+    expect(applicationResponse.status).toBe(201);
+
+    const applicationResponse2 = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-15',
+        companyid: companyId,
+        position: 'Middle Backend Developer',
+        location: 'Lagos',
+        status: 'Applied'
+      });
+
+    const applicationId2 = applicationResponse2.body.id;
+    createdApplicationIds.push(applicationId2);
+
+    expect(applicationResponse2.status).toBe(201);
+
+    const applicationResponse3 = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-25',
+        companyid: companyId,
+        position: 'Zulu Backend Developer',
+        location: 'Lagos',
+        status: 'Interview'
+      });
+
+    const applicationId3 = applicationResponse3.body.id;
+    createdApplicationIds.push(applicationId3);
+
+    expect(applicationResponse3.status).toBe(201);
+
+    const response = await request(app)
+    .get(`/api/applications?search=${uniqueId}&sortBy=status&order=desc`)
+    .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.map(app => app.id)).toHaveLength(3);
+    expect(response.body.data.map(app => app.status)).toEqual([
+      'Rejected',
+      'Interview',
+      'Applied'
+    ]);
+
+  });
+
+  test('should reject unsupported fields', async () => {
+    const response = await request(app)
+      .get('/api/applications?sortBy=password&order=asc')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe('Invalid sort field');
+  });
+
+  test('should reject invalid order value', async () => {
+    const response = await request(app)
+      .get('/api/applications?sortBy=position&order=sideways')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe('Invalid sort order');
+  });
+
+  test('should sort applications based on the default behaviour', async () => {
+    const uniqueId = Date.now();
+
+    const companyName = `Skye Company ${uniqueId}`;
+
+    //company creation
+    const createResponse = await request(app)
+    .post('/api/companies')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      name: companyName,
+    });
+
+    const companyId = createResponse.body.data.id;
+    createdCompanyIds.push(companyId);
+
+    expect(createResponse.status).toBe(201);
+
+    //first application
+    const applicationResponse = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-05',
+        companyid: companyId,
+        position: 'Backend Developer',
+        location: 'Lagos',
+        status: 'Applied'
+      });
+
+    const applicationId = applicationResponse.body.id;
+    createdApplicationIds.push(applicationId);
+
+    expect(applicationResponse.status).toBe(201);
+
+    //second application
+    const applicationResponse2 = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-15',
+        companyid: companyId,
+        position: 'Frontend Developer',
+        location: 'Lagos',
+        status: 'Applied'
+      });
+
+    const applicationId2 = applicationResponse2.body.id;
+    createdApplicationIds.push(applicationId2);
+
+    expect(applicationResponse2.status).toBe(201);
+
+    //third application
+    const applicationResponse3 = await request(app)
+      .post('/api/applications')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dateapplied: '2026-11-25',
+        companyid: companyId,
+        position: 'Software Engineer',
+        location: 'Lagos',
+        status: 'Applied'
+      });
+
+    const applicationId3 = applicationResponse3.body.id;
+    createdApplicationIds.push(applicationId3);
+
+    expect(applicationResponse3.status).toBe(201);
+
+    const response = await request(app)
+    .get(`/api/applications?search=${uniqueId}`)
+    .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(3);
+    expect(response.body.data.map(app => app.date_applied)).toEqual([
+      '2026-11-25',
+      '2026-11-15',
+      '2026-11-05'
+    ]);
+  }); 
+
 });
 
 afterAll(async () => {

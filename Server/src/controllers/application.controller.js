@@ -1,3 +1,4 @@
+
 import  { pool }  from '../config/db.js';
 import { applicationValidator, applicationUpdateValidator } from '../validators/application.validator.js';
 import { applicationStatusSchema, dateSchema } from '../validators/application.validator.js';
@@ -16,11 +17,24 @@ export const fetchApplications = async (req, res) => {
   const startDate = req.query.startDate;
   const endDate = req.query.endDate;
   const position = req.query.position;
-  const search = req.query.search
+  const search = req.query.search;
+  const sortBy = req.query.sortBy ?? 'dateApplied';
+  const order = req.query.order ?? 'desc';
 
   const userId = req.user.userId;
   const page = Number(req.query.page  ?? 1);
   const limit = Number(req.query.limit ?? 10);
+
+  const allowedSortFields = {
+    dateApplied: 'applications.dateapplied',
+    position: 'applications.position',
+    company: 'companies.name',
+    status: 'applications.status'
+  };
+
+  const sortOrder = order.toUpperCase();
+
+  const sortColumn = allowedSortFields[sortBy];
 
  //start date and end date validation
   if (startDate) {
@@ -141,6 +155,20 @@ export const fetchApplications = async (req, res) => {
       )`;
     }
 
+    //sort
+    if(!sortColumn){
+     return res.status(400).json({
+       message: 'Invalid sort field'
+     })
+    }
+
+    //order
+   if (sortOrder !== 'ASC' && sortOrder !== 'DESC') {
+      return res.status(400).json({
+        message: 'Invalid sort order'
+      });
+    }
+
     const countQuery = `SELECT COUNT(*) FROM ${filterQuery}`;
 
     const countResult = await pool.query(countQuery, values);
@@ -165,7 +193,7 @@ export const fetchApplications = async (req, res) => {
         applications.location AS application_location,
         TO_CHAR(applications.dateapplied, 'YYYY-MM-DD') AS date_applied
       FROM ${filterQuery}
-       ORDER BY applications.dateapplied DESC, applications.id ASC
+       ORDER BY ${sortColumn} ${sortOrder}, applications.id ASC
       LIMIT $${queryValues.length - 1}
       OFFSET $${queryValues.length}
     `;
