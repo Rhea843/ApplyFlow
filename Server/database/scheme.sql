@@ -5,6 +5,13 @@ CREATE TYPE application_status AS ENUM (
     'Offer'
 );
 
+CREATE TYPE interview_status AS ENUM (
+    'Scheduled',
+    'Completed',
+    'Cancelled',
+    'Rescheduled'
+);
+
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
@@ -41,4 +48,24 @@ CREATE TABLE application_status_history(
     status application_status NOT NULL,
     changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     FOREIGN KEY (application_id) REFERENCES applications(id) ON DELETE CASCADE
+);
+
+CREATE TABLE interviews(
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    application_id UUID NOT NULL,
+    interview_date DATE NOT NULL,
+    interview_time TIME NOT NULL,
+    timezone TEXT NOT NULL,
+    interview_type TEXT NOT NULL,
+    status interview_status NOT NULL DEFAULT 'Scheduled',
+    location TEXT,
+    meeting_link TEXT,
+    notes TEXT,
+    rescheduled_from_interview_id UUID, 
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    FOREIGN KEY (application_id) REFERENCES applications(id) ON DELETE CASCADE,
+    FOREIGN KEY (rescheduled_from_interview_id) REFERENCES interviews(id) ON DELETE SET NULL,
+
+    CHECK (rescheduled_from_interview_id IS NULL
+       OR rescheduled_from_interview_id <> id)
 );
