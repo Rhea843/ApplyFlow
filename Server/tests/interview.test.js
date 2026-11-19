@@ -3,13 +3,23 @@ import request from 'supertest';
 import { app } from '../src/app.js';
 import jwt from 'jsonwebtoken';
 
+const createdInterviewIds = [];
+
 const userId = '91e19194-0431-4a43-ba1a-7e499ee80c33';
+const otherUserId = 'b8e5f7ab-3db2-40b8-a44a-9fa3dd39bbcc';
 
 const token = jwt.sign(
-    { userId },
-    process.env.JWT_SECRET,
-    { expiresIn: '1h' }
+  { userId },
+  process.env.JWT_SECRET,
+  { expiresIn: '1h' }
 );
+
+const otherToken = jwt.sign(
+  { userId: otherUserId },
+  process.env.JWT_SECRET,
+  { expiresIn: '1h' }
+);
+
 
 describe('POST /api/interviews', () => {
 
@@ -23,23 +33,19 @@ describe('POST /api/interviews', () => {
 
   test('should create an interview for an application owned by the authenticated user', async () => {
     const response = await request(app)
-      .post('/api/interviews')
-      .set('Authorization', `Bearer ${token}`)
-      .send({
-          application_id: '5e731112-e2ee-4bbd-8be4-8ed6dc1d09e0',
-          interview_date: '2026-12-01',
-          interview_time: '10:00',
-          timezone: 'Africa/Lagos',
-          interview_type: 'Technical Interview'
-      });
+    .post('/api/interviews')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      application_id: '5e731112-e2ee-4bbd-8be4-8ed6dc1d09e0',
+      interview_date: '2026-12-01',
+      interview_time: '10:00',
+      timezone: 'Africa/Lagos',
+      interview_type: 'Technical Interview'
+    });
+  
 
     const savedInterview = await pool.query(
       'SELECT * FROM interviews WHERE id = $1',
-      [response.body.data.id]
-    );
-
-    await pool.query(
-      'DELETE FROM interviews WHERE id = $1',
       [response.body.data.id]
     );
 
@@ -50,6 +56,7 @@ describe('POST /api/interviews', () => {
     expect(savedInterview.rows[0].status).toBe('Scheduled'); 
 
     expect(response.status).toBe(201);
+    createdInterviewIds.push(response.body.data.id);
 
     expect(response.body.message).toBe('Interview created successfully');
 
@@ -198,24 +205,123 @@ describe('POST /api/interviews', () => {
 
   test('should accept interview application without location, meeting_link, or notes ', async () => {
     const response = await request(app)
+    .post('/api/interviews')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      application_id: '5e731112-e2ee-4bbd-8be4-8ed6dc1d09e0',
+      interview_date: '2026-12-10',
+      interview_time: '20:10',
+      timezone: 'Africa/Lagos',
+      interview_type: 'Technical Interview'
+    });
+
+    expect(response.status).toBe(201);
+    createdInterviewIds.push(response.body.data.id);
+    expect(response.body.message).toBe('Interview created successfully');
+  });
+
+});
+
+describe('GET /api/interviews', () => {
+
+  beforeAll(async () => {
+    const response = await request(app)
       .post('/api/interviews')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Authorization', `Bearer ${otherToken}`)
       .send({
-        application_id: '5e731112-e2ee-4bbd-8be4-8ed6dc1d09e0',
-        interview_date: '2026-12-10',
-        interview_time: '20:10',
+        application_id: '75d3fa53-1523-41b4-854e-4315c9cb4033',
+        interview_date: '2026-12-15',
+        interview_time: '11:00',
         timezone: 'Africa/Lagos',
         interview_type: 'Technical Interview'
       });
 
     expect(response.status).toBe(201);
-    expect(response.body.message).toBe('Interview created successfully');
+
+    createdInterviewIds.push(response.body.data.id);
   });
 
+  test('should return all interviews for the authenticated user', async () => {
 
+    const result = await pool.query(
+      `SELECT interviews.id
+      FROM interviews
+      JOIN applications
+      ON interviews.application_id = applications.id
+      WHERE applications.userid = $1
+      ORDER BY interviews.interview_date ASC,
+      interviews.interview_time ASC`,
+      [userId]
+    );
+
+    const response = await request(app)
+      .get('/api/interviews')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+
+    const expectedIds = result.rows.map(row => row.id);
+    const actualIds = response.body.data.map(interview => interview.id);
+    
+    
+    expect(Array.isArray(response.body.data)).toBe(true);
+    
+    expect(actualIds).toEqual(expectedIds);
+
+  });
+
+  test('should not return interviews belonging to another user', async () => {
+
+    const result = await pool.query(
+      `SELECT interviews.id
+      FROM interviews
+      JOIN applications
+      ON interviews.application_id = applications.id
+      WHERE applications.userid = $1
+      ORDER BY interviews.interview_date ASC,
+      interviews.interview_time ASC`,
+      [otherUserId]
+    );
+
+    const response = await request(app)
+    .get('/api/interviews')
+    .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+
+    const actualIds = response.body.data.map(
+      interview => interview.id
+    );
+
+    const otherUserInterviewIds = result.rows.map(
+     row => row.id
+    );
+
+    expect(otherUserInterviewIds.length).toBeGreaterThan(0);
+
+    for (const id of otherUserInterviewIds) {
+      expect(actualIds).not.toContain(id);
+    }
+
+  })
 
 });
 
 afterAll(async () => {
+  
+  if (createdInterviewIds.length > 0) {
+    await pool.query(
+    'DELETE FROM interviews WHERE id = ANY($1::uuid[])',
+    [[...new Set(createdInterviewIds)]]
+  );
+  }
+
+  await pool.query(
+  `UPDATE applications
+   SET status = 'Applied'
+   WHERE id = $1`,
+  ['75d3fa53-1523-41b4-854e-4315c9cb4033']
+);
+
   await pool.end();
 });

@@ -61,7 +61,7 @@ export const createInterview = async (req, res) => {
       RETURNING *;`,
       [application_id, interview_date, interview_time, timezone, interview_type, location ?? null, meeting_link ?? null, notes ?? null]
     );
-    
+
     return res.status(201).json({
       message: 'Interview created successfully',
       data: result.rows[0]
@@ -74,3 +74,31 @@ export const createInterview = async (req, res) => {
     });
  }
 };
+
+export const fetchInterviews = async (req, res) => {
+  try{
+    const userId = req.user.userId;
+
+    const result = await pool.query(
+      `SELECT interviews.*
+      FROM interviews
+      JOIN applications
+      ON interviews.application_id = applications.id
+      WHERE applications.userid = $1
+      ORDER BY interviews.interview_date ASC,
+        interviews.interview_time ASC;`,
+      [userId]  
+    );
+
+    return res.status(200).json({
+    message: 'Interviews retrieved successfully',
+    data: result.rows
+    })
+ 
+  } catch (error) {
+    console.error('Error fetching interviews:', error);
+    return res.status(500).json({
+      message: 'Internal server error'
+    });
+  }
+}
