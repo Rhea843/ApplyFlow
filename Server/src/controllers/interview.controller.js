@@ -1,5 +1,6 @@
 import { pool } from '../config/db.js';
-import { interviewValidator } from '../validators/interview.validator.js';
+import { interviewValidator, updateInterviewValidator, interviewIdValidator } from '../validators/interview.validator.js';
+
 
 export const createInterview = async (req, res) => {
 
@@ -101,4 +102,142 @@ export const fetchInterviews = async (req, res) => {
       message: 'Internal server error'
     });
   }
+}
+
+export const fetchInterviewById = async (req, res) => {
+
+  try{
+    const id  = req.params.id;
+    const userId = req.user.userId;
+
+    const validation = interviewIdValidator.safeParse(id);
+
+    if (!validation.success) {
+    return res.status(400).json({
+      message: 'Invalid interview ID',
+      errors: validation.error.issues
+    });
+    }
+
+    const result = await pool.query(
+      `SELECT interviews.*
+      FROM interviews
+      JOIN applications
+      ON interviews.application_id = applications.id
+      WHERE interviews.id = $1
+      AND applications.userid = $2;`,
+      [id, userId]
+    )
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        message: 'Interview not found'
+      })
+    }
+
+    return res.status(200).json({
+      message: 'Interview retrieved successfully',
+      data: result.rows[0]
+    })
+
+  } catch(error) {
+    console.error('Error fetching interview:', error);
+    return res.status(500).json({
+      message: 'Internal server error'
+    });
+  }
+
+}
+
+export const updateInterview = async(req, res) => {
+
+  try {
+    const id  = req.params.id;
+    const idValidation = interviewIdValidator.safeParse(id);
+
+    if (!idValidation.success) {
+      return res.status(400).json({
+        message: 'Invalid interview ID',
+        errors: idValidation.error.issues
+      });
+    }
+
+    const validation = updateInterviewValidator.safeParse(req.body);
+
+    if (!validation.success) {
+      return res.status(400).json({
+        message: 'Invalid interview data',
+        errors: validation.error.issues
+      });
+    }
+
+    const userId = req.user.userId;
+
+    const interviewResult = await pool.query(
+    `SELECT interviews.*
+      FROM interviews
+      JOIN applications
+      ON interviews.application_id = applications.id
+      WHERE interviews.id = $1
+      AND applications.userid = $2`,
+      [id, userId]
+    );
+
+    if (interviewResult.rows.length === 0) {
+      return res.status(404).json({
+        message: 'Interview not found'
+      });
+    }
+
+    if (interviewResult.rows[0].status !== 'Scheduled') {
+      return res.status(409).json({
+        message: 'Only interviews with the status of scheduled can be updated'
+      });
+    }
+    
+    const fields = Object.keys(validation.data);
+    const values = Object.values(validation.data);
+
+    const assignments = fields.map((field, index) => {
+      return `${field} = $${index + 1}`;
+    }).join(', ');
+
+    values.push(id, userId);
+
+    const query = `
+      UPDATE interviews
+      SET ${assignments}
+      WHERE id = $${values.length - 1}
+      AND status = 'Scheduled'
+      AND EXISTS (
+        SELECT 1
+        FROM applications
+        WHERE applications.id = interviews.application_id
+        AND applications.userid = $${values.length}
+      )
+      RETURNING *;
+    `;
+
+    const result = await pool.query(query, values);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        message: 'Interview not found or cannot be updated'
+      });
+    }
+
+    return res.status(200).json({
+      message: 'Interview updated successfully',
+      data: result.rows[0]
+    });
+    
+
+  } catch (error) {
+    console.error('Error updating interview:', error);
+    return res.status(500).json({
+      message: 'Internal server error'
+    });
+
+  }
+
 }

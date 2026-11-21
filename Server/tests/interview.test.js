@@ -2,6 +2,7 @@ import { pool } from '../src/config/db.js';
 import request from 'supertest';
 import { app } from '../src/app.js';
 import jwt from 'jsonwebtoken';
+import { application } from 'express';
 
 const createdInterviewIds = [];
 
@@ -225,6 +226,14 @@ describe('POST /api/interviews', () => {
 describe('GET /api/interviews', () => {
 
   beforeAll(async () => {
+    
+    await pool.query(
+      `UPDATE applications
+      SET status = 'Interview'
+      WHERE id = $1`,
+      ['75d3fa53-1523-41b4-854e-4315c9cb4033']
+    );
+
     const response = await request(app)
       .post('/api/interviews')
       .set('Authorization', `Bearer ${otherToken}`)
@@ -307,8 +316,953 @@ describe('GET /api/interviews', () => {
 
 });
 
-afterAll(async () => {
+describe('GET /api/interviews/:id', () => {
+
+  test('should return a specific interview belonging to the authenticated user', async () => {
+    
+    const applicationId = '5e731112-e2ee-4bbd-8be4-8ed6dc1d09e0'
+
+    const response = await request(app)
+    .post('/api/interviews')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      application_id: applicationId,
+      interview_date: '2026-12-01',
+      interview_time: '10:00',
+      timezone: 'Africa/Lagos',
+      interview_type: 'Technical Interview'
+    });
+
+    expect(response.status).toBe(201);
+    createdInterviewIds.push(response.body.data.id);
+
+    const interviewId = response.body.data.id;
+
+    const result = await request(app)
+    .get(`/api/interviews/${interviewId}`)
+    .set('Authorization', `Bearer ${token}`)
+
+   expect(result.status).toBe(200); 
+   expect(result.body.data.id).toBe(interviewId);
+   expect(result.body.data.application_id).toBe(applicationId);
+
+
+  });
+
+  test('should reject another user accessing interview belonging to another user', async () => {
+    const applicationId = '75d3fa53-1523-41b4-854e-4315c9cb4033'
+
+    const response = await request(app)
+    .post('/api/interviews')
+    .set('Authorization', `Bearer ${otherToken}`)
+    .send({
+      application_id: applicationId,
+      interview_date: '2026-12-01',
+      interview_time: '10:00',
+      timezone: 'Africa/Lagos',
+      interview_type: 'Technical Interview'
+    });
+    expect(response.status).toBe(201);
+    createdInterviewIds.push(response.body.data.id);
+
+    const interviewId = response.body.data.id;
+
+    const result = await request(app)
+    .get(`/api/interviews/${interviewId}`)
+    .set('Authorization', `Bearer ${token}`)
+
+   expect(result.status).toBe(404); 
+
+  })
+
+  test('should reject non-existent interview', async () => {
+
+    const interviewId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+
+    const result = await request(app)
+    .get(`/api/interviews/${interviewId}`)
+    .set('Authorization', `Bearer ${token}`)
+
+   expect(result.status).toBe(404); 
+
+  })
+
+  test('should reject an invalid interview UUID', async () => {
+
+    const result = await request(app)
+    .get('/api/interviews/not-a-valid-uuid')
+    .set('Authorization', `Bearer ${token}`)
+
+   expect(result.status).toBe(400); 
+
+  })
   
+  test('should reject interview without authentication token', async () => {
+
+    const result = await request(app)
+    .get('/api/interviews/not-a-valid-uuid')
+
+   expect(result.status).toBe(401); 
+
+  })
+  
+});
+
+describe('PATCH /api/interviews/:id', () => {
+  test('should update only the interview date and other fields remain unchanged', async () => {
+
+    const applicationId = '5e731112-e2ee-4bbd-8be4-8ed6dc1d09e0'
+
+    const response = await request(app)
+    .post('/api/interviews')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      application_id: applicationId,
+      interview_date: '2026-12-01',
+      interview_time: '10:00',
+      timezone: 'Africa/Lagos',
+      interview_type: 'Technical Interview'
+    });
+
+    expect(response.status).toBe(201);
+    createdInterviewIds.push(response.body.data.id);
+    const interviewId = response.body.data.id;
+
+    const result = await request(app)
+    .patch(`/api/interviews/${interviewId}`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      interview_date: '2026-12-10'
+    })
+
+    expect(result.status).toBe(200);
+    expect(result.body.data.interview_date).toBe('2026-12-10');
+    expect(result.body.data.timezone).toBe('Africa/Lagos');
+    expect(result.body.data.interview_type).toBe('Technical Interview');
+    expect(result.body.data.interview_time).toBe('10:00:00');
+
+
+
+  })
+
+  test('should update interview_date, interview_time, and interview_type but timezone remains unchanged', async () => {
+
+    const applicationId = '5e731112-e2ee-4bbd-8be4-8ed6dc1d09e0'
+
+    const response = await request(app)
+    .post('/api/interviews')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      application_id: applicationId,
+      interview_date: '2026-12-01',
+      interview_time: '10:00',
+      timezone: 'Africa/Lagos',
+      interview_type: 'Technical Interview'
+    });
+
+    expect(response.status).toBe(201);
+    createdInterviewIds.push(response.body.data.id);
+    const interviewId = response.body.data.id;
+
+    const result = await request(app)
+    .patch(`/api/interviews/${interviewId}`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      interview_date: '2026-12-06',
+      interview_time: '12:00',
+      interview_type: 'HR Interview'
+    });
+
+    expect(result.status).toBe(200);
+    expect(result.body.data.interview_date).toBe('2026-12-06');
+    expect(result.body.data.timezone).toBe('Africa/Lagos');
+    expect(result.body.data.interview_type).toBe('HR Interview');
+    expect(result.body.data.interview_time).toBe('12:00:00');
+
+  })
+
+  test('should update optional fields with null', async () => {
+
+    const applicationId = '5e731112-e2ee-4bbd-8be4-8ed6dc1d09e0'
+
+    const response = await request(app)
+    .post('/api/interviews')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      application_id: applicationId,
+      interview_date: '2026-12-01',
+      interview_time: '10:00',
+      timezone: 'Africa/Lagos',
+      interview_type: 'Technical Interview',
+      location: 'Lagos, Nigeria',
+      meeting_link: 'https://zoom.us/join',
+      notes: 'First round interview'
+    });
+
+    expect(response.status).toBe(201);
+    createdInterviewIds.push(response.body.data.id);
+    const interviewId = response.body.data.id;
+
+    const result = await request(app)
+    .patch(`/api/interviews/${interviewId}`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      interview_date: '2026-12-06',
+      interview_time: '12:00',
+      interview_type: 'HR Interview',
+      location: null,
+      meeting_link: null,
+      notes: null
+    });
+
+    expect(result.status).toBe(200);
+    expect(result.body.data.interview_date).toBe('2026-12-06');
+    expect(result.body.data.timezone).toBe('Africa/Lagos');
+    expect(result.body.data.interview_type).toBe('HR Interview');
+    expect(result.body.data.interview_time).toBe('12:00:00');
+    expect(result.body.data.location).toBe(null);
+    expect(result.body.data.meeting_link).toBe(null);
+    expect(result.body.data.notes).toBe(null);
+
+  })
+
+  test('should reject an empty patch request', async () => {
+
+    const applicationId = '5e731112-e2ee-4bbd-8be4-8ed6dc1d09e0'
+
+    const response = await request(app)
+    .post('/api/interviews')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      application_id: applicationId,
+      interview_date: '2026-12-01',
+      interview_time: '10:00',
+      timezone: 'Africa/Lagos',
+      interview_type: 'Technical Interview',
+      location: 'Lagos, Nigeria',
+      meeting_link: 'https://zoom.us/join',
+      notes: 'First round interview'
+    });
+
+    expect(response.status).toBe(201);
+    createdInterviewIds.push(response.body.data.id);
+    const interviewId = response.body.data.id;
+
+    const result = await request(app)
+    .patch(`/api/interviews/${interviewId}`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({});
+
+    expect(result.status).toBe(400);
+    expect(result.body.message).toBe('Invalid interview data');
+
+  })
+
+  test('should reject an updating the status field as it is a protected field', async () => {
+
+    const applicationId = '5e731112-e2ee-4bbd-8be4-8ed6dc1d09e0'
+
+    const response = await request(app)
+    .post('/api/interviews')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      application_id: applicationId,
+      interview_date: '2026-12-01',
+      interview_time: '10:00',
+      timezone: 'Africa/Lagos',
+      interview_type: 'Technical Interview',
+      location: 'Lagos, Nigeria',
+      meeting_link: 'https://zoom.us/join',
+      notes: 'First round interview'
+    });
+
+    expect(response.status).toBe(201);
+    createdInterviewIds.push(response.body.data.id);
+    const interviewId = response.body.data.id;
+
+    const result = await request(app)
+    .patch(`/api/interviews/${interviewId}`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      status: 'Completed'
+    });
+
+    const check = await pool.query(
+      'SELECT status FROM interviews WHERE id = $1',
+      [interviewId]
+    );
+
+    expect(result.status).toBe(400);
+    expect(result.body.message).toBe('Invalid interview data');
+    expect(check.rows[0].status).toBe('Scheduled');
+
+  })
+
+  test('should reject user from updating another user application', async () => {
+
+    const applicationId = '5e731112-e2ee-4bbd-8be4-8ed6dc1d09e0'
+
+    const response = await request(app)
+    .post('/api/interviews')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      application_id: applicationId,
+      interview_date: '2026-12-01',
+      interview_time: '10:00',
+      timezone: 'Africa/Lagos',
+      interview_type: 'Technical Interview'
+    });
+
+    expect(response.status).toBe(201);
+    createdInterviewIds.push(response.body.data.id);
+    const interviewId = response.body.data.id;
+
+    const result = await request(app)
+    .patch(`/api/interviews/${interviewId}`)
+    .set('Authorization', `Bearer ${otherToken}`)
+    .send({
+      interview_date: '2026-12-06',
+      interview_time: '12:00',
+      interview_type: 'HR Interview'
+    });
+
+    const check = await pool.query(
+      `SELECT interview_date, interview_time, timezone, interview_type
+      FROM interviews
+      WHERE id = $1`,
+      [interviewId]
+    );
+
+    expect(result.status).toBe(404);
+    expect(check.rows[0].interview_date).toBe('2026-12-01');
+    expect(check.rows[0].timezone).toBe('Africa/Lagos');
+    expect(check.rows[0].interview_type).toBe('Technical Interview');
+    expect(check.rows[0].interview_time).toBe('10:00:00');
+  })
+
+  test('should reject updates for completed interviews', async () => {
+
+    const applicationId = '5e731112-e2ee-4bbd-8be4-8ed6dc1d09e0'
+
+    const response = await request(app)
+    .post('/api/interviews')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      application_id: applicationId,
+      interview_date: '2026-12-01',
+      interview_time: '10:00',
+      timezone: 'Africa/Lagos',
+      interview_type: 'Technical Interview',
+      location: 'Lagos, Nigeria',
+      meeting_link: 'https://zoom.us/join',
+      notes: 'First round interview'
+    });
+
+    expect(response.status).toBe(201);
+    createdInterviewIds.push(response.body.data.id);
+    const interviewId = response.body.data.id;
+
+    await pool.query(
+      `UPDATE interviews SET status = 'Completed' WHERE id = $1`,
+      [ interviewId ]
+    );
+
+    const result = await request(app)
+    .patch(`/api/interviews/${interviewId}`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      interview_date: '2026-12-09',
+    });
+
+    const check = await pool.query(
+      'SELECT status FROM interviews WHERE id = $1',
+      [interviewId]
+    );
+
+    expect(result.status).toBe(409);
+    expect(result.body.message).toBe('Only interviews with the status of scheduled can be updated');
+    expect(check.rows[0].status).toBe('Completed');
+
+  })
+
+  test('should reject updates for cancelled interviews', async () => {
+
+    const applicationId = '5e731112-e2ee-4bbd-8be4-8ed6dc1d09e0'
+
+    const response = await request(app)
+    .post('/api/interviews')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      application_id: applicationId,
+      interview_date: '2026-12-01',
+      interview_time: '10:00',
+      timezone: 'Africa/Lagos',
+      interview_type: 'Technical Interview',
+      location: 'Lagos, Nigeria',
+      meeting_link: 'https://zoom.us/join',
+      notes: 'First round interview'
+    });
+
+    expect(response.status).toBe(201);
+    createdInterviewIds.push(response.body.data.id);
+    const interviewId = response.body.data.id;
+
+    await pool.query(
+      `UPDATE interviews SET status = 'Cancelled' WHERE id = $1`,
+      [ interviewId ]
+    );
+
+    const result = await request(app)
+    .patch(`/api/interviews/${interviewId}`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      interview_date: '2026-12-01',
+    });
+
+    const check = await pool.query(
+      'SELECT status, interview_date FROM interviews WHERE id = $1',
+      [interviewId]
+    );
+
+    expect(result.status).toBe(409);
+    expect(result.body.message).toBe('Only interviews with the status of scheduled can be updated');
+    expect(check.rows[0].status).toBe('Cancelled');
+    expect(check.rows[0].interview_date).toBe('2026-12-01');
+
+  })
+
+  test('should reject updates for rescheduled interviews', async () => {
+
+    const applicationId = '5e731112-e2ee-4bbd-8be4-8ed6dc1d09e0'
+
+    const response = await request(app)
+    .post('/api/interviews')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      application_id: applicationId,
+      interview_date: '2026-12-09',
+      interview_time: '10:00',
+      timezone: 'Africa/Lagos',
+      interview_type: 'Technical Interview',
+      location: 'Lagos, Nigeria',
+      meeting_link: 'https://zoom.us/join',
+      notes: 'First round interview'
+    });
+
+    expect(response.status).toBe(201);
+    createdInterviewIds.push(response.body.data.id);
+    const interviewId = response.body.data.id;
+
+    await pool.query(
+      `UPDATE interviews SET status = 'Rescheduled' WHERE id = $1`,
+      [ interviewId ]
+    );
+
+    const result = await request(app)
+    .patch(`/api/interviews/${interviewId}`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      interview_date: '2026-12-01',
+    });
+
+    const check = await pool.query(
+      'SELECT status, interview_date FROM interviews WHERE id = $1',
+      [interviewId]
+    );
+
+    expect(result.status).toBe(409);
+    expect(result.body.message).toBe('Only interviews with the status of scheduled can be updated');
+    expect(check.rows[0].status).toBe('Rescheduled');
+    expect(check.rows[0].interview_date).toBe('2026-12-09');
+
+  })
+  
+  test('should reject updates for invalid interview ID', async () => {
+
+    const result = await request(app)
+    .patch(`/api/interviews/not-a-valid-uuid`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      interview_date: '2026-12-01',
+    });
+
+    expect(result.status).toBe(400);
+    expect(result.body.message).toBe('Invalid interview ID');
+    
+  })
+
+  test('should reject updates without authentication token', async () => {
+
+    const result = await request(app)
+    .patch('/api/interviews/91e19194-0431-4a43-ba1a-7e499ee80c33')
+    .send({
+      interview_date: '2026-12-01',
+    });
+
+    expect(result.status).toBe(401);
+    
+  })
+
+  test('should reject updates to application_id', async () => {
+
+    const applicationId = '5e731112-e2ee-4bbd-8be4-8ed6dc1d09e0'
+
+    const response = await request(app)
+    .post('/api/interviews')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      application_id: applicationId,
+      interview_date: '2026-12-01',
+      interview_time: '10:00',
+      timezone: 'Africa/Lagos',
+      interview_type: 'Technical Interview'
+    });
+
+    expect(response.status).toBe(201);
+    createdInterviewIds.push(response.body.data.id);
+    const interviewId = response.body.data.id;
+
+    const result = await request(app)
+    .patch(`/api/interviews/${interviewId}`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      application_id: '5e731112-e2ee-4bbd-8be4-8ed6dc1d09f5',
+    });
+
+    const check = await pool.query(
+      `SELECT application_id
+      FROM interviews
+      WHERE id = $1`,
+      [interviewId]
+    );
+
+    expect(result.status).toBe(400);
+    expect(check.rows[0].application_id).toBe(applicationId);
+  })
+
+  test('should reject updates to status', async () => {
+
+    const applicationId = '5e731112-e2ee-4bbd-8be4-8ed6dc1d09e0'
+
+    const response = await request(app)
+    .post('/api/interviews')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      application_id: applicationId,
+      interview_date: '2026-12-01',
+      interview_time: '10:00',
+      timezone: 'Africa/Lagos',
+      interview_type: 'Technical Interview'
+    });
+
+    expect(response.status).toBe(201);
+    createdInterviewIds.push(response.body.data.id);
+    const interviewId = response.body.data.id;
+
+    const result = await request(app)
+    .patch(`/api/interviews/${interviewId}`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      status: 'Completed'
+    });
+
+    const check = await pool.query(
+      `SELECT status
+      FROM interviews
+      WHERE id = $1`,
+      [interviewId]
+    );
+
+    expect(result.status).toBe(400);
+    expect(check.rows[0].status).toBe('Scheduled');
+  })
+
+  test('should reject updates to id', async () => {
+
+    const applicationId = '5e731112-e2ee-4bbd-8be4-8ed6dc1d09e0'
+
+    const response = await request(app)
+    .post('/api/interviews')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      application_id: applicationId,
+      interview_date: '2026-12-01',
+      interview_time: '10:00',
+      timezone: 'Africa/Lagos',
+      interview_type: 'Technical Interview'
+    });
+
+    expect(response.status).toBe(201);
+    createdInterviewIds.push(response.body.data.id);
+    const interviewId = response.body.data.id;
+
+    const result = await request(app)
+    .patch(`/api/interviews/${interviewId}`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      id: '91e19194-0431-4a43-ba1a-7e499ee80c33'
+    });
+
+    const check = await pool.query(
+      `SELECT id
+      FROM interviews
+      WHERE id = $1`,
+      [interviewId]
+    );
+
+    expect(result.status).toBe(400);
+    expect(check.rows[0].id).toBe(interviewId);
+  })
+
+  test('should reject updates to created_at', async () => {
+
+    const applicationId = '5e731112-e2ee-4bbd-8be4-8ed6dc1d09e0'
+
+    const response = await request(app)
+    .post('/api/interviews')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      application_id: applicationId,
+      interview_date: '2026-12-01',
+      interview_time: '10:00',
+      timezone: 'Africa/Lagos',
+      interview_type: 'Technical Interview'
+    });
+
+    expect(response.status).toBe(201);
+    createdInterviewIds.push(response.body.data.id);
+    const interviewId = response.body.data.id;
+    const createdAt = response.body.data.created_at
+
+    const result = await request(app)
+    .patch(`/api/interviews/${interviewId}`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      created_at: '2026-11-20T10:00:00Z' 
+    });
+
+    const check = await pool.query(
+      `SELECT created_at
+      FROM interviews
+      WHERE id = $1`,
+      [interviewId]
+    );
+
+    expect(result.status).toBe(400);
+    expect(new Date(check.rows[0].created_at).toISOString())
+   .toBe(new Date(createdAt).toISOString());
+  })
+
+  test('should reject invalid interview date', async () => {
+
+    const applicationId = '5e731112-e2ee-4bbd-8be4-8ed6dc1d09e0'
+
+    const response = await request(app)
+    .post('/api/interviews')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      application_id: applicationId,
+      interview_date: '2026-12-01',
+      interview_time: '10:00',
+      timezone: 'Africa/Lagos',
+      interview_type: 'Technical Interview'
+    });
+
+    expect(response.status).toBe(201);
+    createdInterviewIds.push(response.body.data.id);
+    const interviewId = response.body.data.id;
+
+    const result = await request(app)
+    .patch(`/api/interviews/${interviewId}`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+     interview_date: '2026-02-30' 
+    });
+
+    const check = await pool.query(
+      `SELECT interview_date
+      FROM interviews
+      WHERE id = $1`,
+      [interviewId]
+    );
+
+    expect(result.status).toBe(400);
+    expect(check.rows[0].interview_date).toBe('2026-12-01');
+  })
+
+  test('should reject invalid interview time', async () => {
+
+    const applicationId = '5e731112-e2ee-4bbd-8be4-8ed6dc1d09e0'
+
+    const response = await request(app)
+    .post('/api/interviews')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      application_id: applicationId,
+      interview_date: '2026-12-01',
+      interview_time: '10:00',
+      timezone: 'Africa/Lagos',
+      interview_type: 'Technical Interview'
+    });
+
+    expect(response.status).toBe(201);
+    createdInterviewIds.push(response.body.data.id);
+    const interviewId = response.body.data.id;
+
+    const result = await request(app)
+    .patch(`/api/interviews/${interviewId}`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+     interview_time: '25:90' 
+    });
+
+    const check = await pool.query(
+      `SELECT interview_time
+      FROM interviews
+      WHERE id = $1`,
+      [interviewId]
+    );
+
+    expect(result.status).toBe(400);
+    expect(check.rows[0].interview_time).toBe('10:00:00');
+  })
+
+  test('should reject invalid timezone', async () => {
+
+    const applicationId = '5e731112-e2ee-4bbd-8be4-8ed6dc1d09e0'
+
+    const response = await request(app)
+    .post('/api/interviews')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      application_id: applicationId,
+      interview_date: '2026-12-01',
+      interview_time: '10:00',
+      timezone: 'Africa/Lagos',
+      interview_type: 'Technical Interview'
+    });
+
+    expect(response.status).toBe(201);
+    createdInterviewIds.push(response.body.data.id);
+    const interviewId = response.body.data.id;
+
+    const result = await request(app)
+    .patch(`/api/interviews/${interviewId}`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+     timezone: 'Africa/Lagos123' 
+    });
+
+    const check = await pool.query(
+      `SELECT timezone
+      FROM interviews
+      WHERE id = $1`,
+      [interviewId]
+    );
+
+    expect(result.status).toBe(400);
+    expect(check.rows[0].timezone).toBe('Africa/Lagos');
+  })
+
+  test('should reject whitespace-only interview type', async () => {
+
+    const applicationId = '5e731112-e2ee-4bbd-8be4-8ed6dc1d09e0'
+
+    const response = await request(app)
+    .post('/api/interviews')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      application_id: applicationId,
+      interview_date: '2026-12-01',
+      interview_time: '10:00',
+      timezone: 'Africa/Lagos',
+      interview_type: 'Technical Interview'
+    });
+
+    expect(response.status).toBe(201);
+    createdInterviewIds.push(response.body.data.id);
+    const interviewId = response.body.data.id;
+
+    const result = await request(app)
+    .patch(`/api/interviews/${interviewId}`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+     interview_type: ' ' 
+    });
+
+    const check = await pool.query(
+      `SELECT interview_type
+      FROM interviews
+      WHERE id = $1`,
+      [interviewId]
+    );
+
+    expect(result.status).toBe(400);
+    expect(check.rows[0].interview_type).toBe('Technical Interview');
+  })
+
+  test('should reject empty string', async () => {
+
+    const applicationId = '5e731112-e2ee-4bbd-8be4-8ed6dc1d09e0'
+
+    const response = await request(app)
+    .post('/api/interviews')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      application_id: applicationId,
+      interview_date: '2026-12-01',
+      interview_time: '10:00',
+      timezone: 'Africa/Lagos',
+      interview_type: 'Technical Interview'
+    });
+
+    expect(response.status).toBe(201);
+    createdInterviewIds.push(response.body.data.id);
+    const interviewId = response.body.data.id;
+
+    const result = await request(app)
+    .patch(`/api/interviews/${interviewId}`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+     interview_type: '' 
+    });
+
+    const check = await pool.query(
+      `SELECT interview_type
+      FROM interviews
+      WHERE id = $1`,
+      [interviewId]
+    );
+
+    expect(result.status).toBe(400);
+    expect(check.rows[0].interview_type).toBe('Technical Interview');
+  })
+
+  test('should update location with null', async () => {
+
+    const applicationId = '5e731112-e2ee-4bbd-8be4-8ed6dc1d09e0'
+
+    const response = await request(app)
+    .post('/api/interviews')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      application_id: applicationId,
+      interview_date: '2026-12-01',
+      interview_time: '10:00',
+      timezone: 'Africa/Lagos',
+      interview_type: 'Technical Interview',
+      location: 'Lagos, Nigeria'
+    });
+
+    expect(response.status).toBe(201);
+    createdInterviewIds.push(response.body.data.id);
+    const interviewId = response.body.data.id;
+
+    const result = await request(app)
+    .patch(`/api/interviews/${interviewId}`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+     location: null
+    });
+
+    const check = await pool.query(
+      `SELECT location
+      FROM interviews
+      WHERE id = $1`,
+      [interviewId]
+    );
+
+    expect(result.status).toBe(200);
+    expect(check.rows[0].location).toBeNull();
+  })
+
+  test('should update meeting_link with null', async () => {
+
+    const applicationId = '5e731112-e2ee-4bbd-8be4-8ed6dc1d09e0'
+
+    const response = await request(app)
+    .post('/api/interviews')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      application_id: applicationId,
+      interview_date: '2026-12-01',
+      interview_time: '10:00',
+      timezone: 'Africa/Lagos',
+      interview_type: 'Technical Interview',
+      location: 'Lagos, Nigeria',
+      meeting_link: 'https://zoom.us/join'
+    });
+
+    expect(response.status).toBe(201);
+    createdInterviewIds.push(response.body.data.id);
+    const interviewId = response.body.data.id;
+
+    const result = await request(app)
+    .patch(`/api/interviews/${interviewId}`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+     meeting_link: null
+    });
+
+    const check = await pool.query(
+      `SELECT meeting_link
+      FROM interviews
+      WHERE id = $1`,
+      [interviewId]
+    );
+
+    expect(result.status).toBe(200);
+    expect(check.rows[0].meeting_link).toBeNull();
+  })
+
+  test('should update notes with null', async () => {
+
+    const applicationId = '5e731112-e2ee-4bbd-8be4-8ed6dc1d09e0'
+
+    const response = await request(app)
+    .post('/api/interviews')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      application_id: applicationId,
+      interview_date: '2026-12-01',
+      interview_time: '10:00',
+      timezone: 'Africa/Lagos',
+      interview_type: 'Technical Interview',
+      location: 'Lagos, Nigeria',
+      meeting_link: 'https://zoom.us/join',
+      notes: 'Prepare technical questions'
+    });
+
+    expect(response.status).toBe(201);
+    createdInterviewIds.push(response.body.data.id);
+    const interviewId = response.body.data.id;
+
+    const result = await request(app)
+    .patch(`/api/interviews/${interviewId}`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+     notes: null
+    });
+
+    const check = await pool.query(
+      `SELECT notes
+      FROM interviews
+      WHERE id = $1`,
+      [interviewId]
+    );
+
+    expect(result.status).toBe(200);
+    expect(result.body.data.notes).toBeNull();
+    expect(check.rows[0].notes).toBeNull();
+  })
+
+  
+
+
+});
+
+afterAll(async () => {
+
   if (createdInterviewIds.length > 0) {
     await pool.query(
     'DELETE FROM interviews WHERE id = ANY($1::uuid[])',

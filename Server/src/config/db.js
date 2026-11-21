@@ -1,7 +1,9 @@
-import { Pool } from 'pg';
+import pg, { Pool } from 'pg';
 import dotenv from 'dotenv';
 
 dotenv.config();
+
+pg.types.setTypeParser(1082, (value) => value);
 
 export const pool = new Pool({
     host: process.env.DB_HOST,
