@@ -49,4 +49,14 @@ export const updateInterviewValidator = z.object({
     notes: z.string().trim().min(1).nullable().optional()
 }).strict().refine((data) => Object.keys(data).length > 0, {
     message: 'At least one field must be provided'
-})
+});
+
+export const rescheduleInterviewValidator = z.object({
+    interview_date: dateSchema,
+    interview_time: timeSchema,
+    timezone: timezoneSchema.optional(),
+    interview_type: z.string().trim().min(1).optional(),
+    location: z.string().trim().min(1).nullable().optional(),
+    meeting_link: z.string().trim().min(1).nullable().optional(),
+    notes: z.string().trim().min(1).nullable().optional()
+}).strict()

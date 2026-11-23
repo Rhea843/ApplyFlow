@@ -2,7 +2,7 @@ import { pool } from '../src/config/db.js';
 import request from 'supertest';
 import { app } from '../src/app.js';
 import jwt from 'jsonwebtoken';
-import { application } from 'express';
+
 
 const createdInterviewIds = [];
 
@@ -1256,10 +1256,302 @@ describe('PATCH /api/interviews/:id', () => {
     expect(check.rows[0].notes).toBeNull();
   })
 
-  
-
-
 });
+
+describe('POST /api/interviews/:id/reschedule', () => {
+
+  test('should reschedule an interview and preserve the original record', async () => {
+
+    const applicationId = '5e731112-e2ee-4bbd-8be4-8ed6dc1d09e0'
+
+    const response = await request(app)
+    .post('/api/interviews')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      application_id: applicationId,
+      interview_date: '2026-12-01',
+      interview_time: '10:00',
+      timezone: 'Africa/Lagos',
+      interview_type: 'Technical Interview',
+      location: 'Lagos, Nigeria',
+      meeting_link: 'https://zoom.us/join',
+      notes: 'Prepare technical questions',
+      status: 'Scheduled'
+    })
+
+    expect(response.status).toBe(201);
+    createdInterviewIds.push(response.body.data.id);
+    const interviewId = response.body.data.id;
+
+
+    const rescheduledResponse = await request(app)
+    .post(`/api/interviews/${interviewId}/reschedule`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      interview_date: '2026-12-02',
+      interview_time: '11:00'
+    })
+
+    expect(rescheduledResponse.status).toBe(201);
+    createdInterviewIds.push(rescheduledResponse.body.data.id);
+    const interviewId2 = rescheduledResponse.body.data.id;
+
+
+    // 3. Check original interview in database
+    const check = await pool.query(
+      `SELECT *
+      FROM interviews
+      WHERE id = $1`,
+      [interviewId]
+    );
+
+    // 4. Check new interview in database
+    const check2 = await pool.query(
+      `SELECT *
+      FROM interviews
+      WHERE id = $1`,
+      [interviewId2]
+    );
+
+    // 5. Write assertions
+    expect(check.rows[0].status).toBe('Rescheduled');
+    expect(check2.rows[0].status).toBe('Scheduled');
+    expect(check.rows[0].interview_date).toBe('2026-12-01');
+    expect(check.rows[0].interview_time).toBe('10:00:00');
+    expect(check2.rows[0].rescheduled_from_interview_id).toBe(interviewId);
+    expect(check2.rows[0].interview_date).toBe('2026-12-02');
+    expect(check2.rows[0].interview_time).toBe('11:00:00');
+    expect(check2.rows[0].timezone).toBe('Africa/Lagos');
+    expect(check2.rows[0].interview_type).toBe('Technical Interview');
+    expect(check2.rows[0].location).toBe('Lagos, Nigeria');
+    expect(check2.rows[0].meeting_link).toBe('https://zoom.us/join');
+    expect(check2.rows[0].notes).toBe('Prepare technical questions');
+    expect(interviewId2).not.toBe(interviewId);
+
+  });
+});
+
+describe('DELETE /api/interviews/:id', () => {
+  test('should accept authenticated owner deletes a Scheduled interview', async () => {
+
+    const applicationId = '5e731112-e2ee-4bbd-8be4-8ed6dc1d09e0'
+
+    const response = await request(app)
+    .post('/api/interviews')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      application_id: applicationId,
+      interview_date: '2026-12-01',
+      interview_time: '10:00',
+      timezone: 'Africa/Lagos',
+      interview_type: 'Technical Interview',
+      location: 'Lagos, Nigeria',
+      meeting_link: 'https://zoom.us/join',
+      notes: 'Prepare technical questions',
+    });
+
+    expect(response.status).toBe(201);
+    const interviewId = response.body.data.id;
+    createdInterviewIds.push(interviewId);
+
+    const result = await request(app)
+    .delete(`/api/interviews/${interviewId}`)
+    .set('Authorization', `Bearer ${token}`)
+
+    expect(result.status).toBe(200);
+
+    const check = await pool.query(
+      `SELECT *
+      FROM interviews
+      WHERE id = $1`,
+      [interviewId]
+    );
+
+    expect(check.rows).toHaveLength(0);
+  })
+
+  test('should reject a user from deleting another user interview', async () => {
+    const applicationId = '5e731112-e2ee-4bbd-8be4-8ed6dc1d09e0'
+
+    const response = await request(app)
+    .post('/api/interviews')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      application_id: applicationId,
+      interview_date: '2026-12-01',
+      interview_time: '10:00',
+      timezone: 'Africa/Lagos',
+      interview_type: 'Technical Interview',
+      location: 'Lagos, Nigeria',
+      meeting_link: 'https://zoom.us/join',
+      notes: 'Prepare technical questions',
+    });
+
+    expect(response.status).toBe(201);
+    const interviewId = response.body.data.id;
+    createdInterviewIds.push(interviewId);
+
+
+    const result = await request(app)
+    .delete(`/api/interviews/${interviewId}`)
+    .set('Authorization', `Bearer ${otherToken}`);
+
+    expect(result.status).toBe(404);
+
+    // Confirm the interview still exists
+    const check = await pool.query(
+      'SELECT * FROM interviews WHERE id = $1',
+      [interviewId]
+    );
+
+    expect(check.rows).toHaveLength(1);
+    
+  });
+
+ test.each(['Completed', 'Cancelled', 'Rescheduled'])(
+    'should reject deletion of an interview with %s status',
+    async (status) => {
+      const response = await request(app)
+        .post('/api/interviews')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          application_id: '5e731112-e2ee-4bbd-8be4-8ed6dc1d09e0',
+          interview_date: '2026-12-01',
+          interview_time: '10:00',
+          timezone: 'Africa/Lagos',
+          interview_type: 'Technical Interview'
+        });
+
+      expect(response.status).toBe(201);
+
+      const interviewId = response.body.data.id;
+      createdInterviewIds.push(interviewId);
+
+      // Set the interview to the status being tested
+      await pool.query(
+        'UPDATE interviews SET status = $1 WHERE id = $2',
+        [status, interviewId]
+      );
+
+      const result = await request(app)
+        .delete(`/api/interviews/${interviewId}`)
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(result.status).toBe(409);
+
+      // Confirm the interview still exists with its original status
+      const check = await pool.query(
+        'SELECT * FROM interviews WHERE id = $1',
+        [interviewId]
+      );
+
+      expect(check.rows).toHaveLength(1);
+      expect(check.rows[0].status).toBe(status);
+    }
+  );
+
+
+  test('should reject an invalid interview UUID', async () => {
+    const result = await request(app)
+      .delete('/api/interviews/invalid-id')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(result.status).toBe(400);
+  });
+
+  test('should reject deletion without authentication', async () => {
+    const result = await request(app)
+      .delete('/api/interviews/91e19194-0431-4a43-ba1a-7e499ee80c33');
+
+    expect(result.status).toBe(401);
+  });
+
+  test('should return 404 when deleting a non-existent interview', async () => {
+    const result = await request(app)
+    .delete(`/api/interviews/00000000-0000-4000-8000-000000000001`)
+    .set('Authorization', `Bearer ${token}`)
+
+    expect(result.status).toBe(404);
+    expect(result.body.message).toBe('Interview not found');
+  })
+
+  test('should delete only the selected interview without affecting its application or sibling interviews', async () => {
+
+    const applicationId = '5e731112-e2ee-4bbd-8be4-8ed6dc1d09e0'
+
+    const response1 = await request(app)
+    .post('/api/interviews')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      application_id: applicationId,
+      interview_date: '2026-12-01',
+      interview_time: '10:00',
+      timezone: 'Africa/Lagos',
+      interview_type: 'Technical Interview',
+      location: 'Lagos, Nigeria',
+      meeting_link: 'https://zoom.us/join',
+      notes: 'Prepare technical questions',
+    });
+
+    expect(response1.status).toBe(201);
+    const interviewId1 = response1.body.data.id;
+    createdInterviewIds.push(interviewId1);
+
+
+    const response2 = await request(app)
+    .post('/api/interviews')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      application_id: applicationId,
+      interview_date: '2026-12-01',
+      interview_time: '10:00',
+      timezone: 'Africa/Lagos',
+      interview_type: 'HR Interview',
+      location: 'Lagos, Nigeria',
+      meeting_link: 'https://zoom.us/join',
+      notes: 'Prepare technical questions',
+    });
+
+    expect(response2.status).toBe(201);
+    const interviewId2 = response2.body.data.id;
+    createdInterviewIds.push(interviewId2);
+
+    const result1 = await request(app)
+    .delete(`/api/interviews/${interviewId1}`)
+    .set('Authorization', `Bearer ${token}`)
+
+     expect(result1.status).toBe(200);
+
+    const check = await pool.query(
+      `SELECT *
+      FROM interviews
+      WHERE id = $1`,
+      [interviewId1]
+    );
+
+    const check2 = await pool.query(
+      `SELECT *
+      FROM interviews
+      WHERE id = $1`,
+      [interviewId2]
+    );
+
+    const applicationCheck = await pool.query(
+      `SELECT *
+      FROM applications
+      WHERE id = $1`,
+      [applicationId]
+    )
+
+    expect(check.rows).toHaveLength(0);
+    expect(check2.rows).toHaveLength(1);
+    expect(applicationCheck.rows).toHaveLength(1);
+
+  })
+
+
+})
+
 
 afterAll(async () => {
 
